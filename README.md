@@ -158,10 +158,6 @@ DAPS evaluates both:
 
 before granting access to protected resources.
 
-### File Integrity Verification
-
-Protected files are verified using SHA-256 hashes to detect tampering or unauthorized modification.
-
 ### USB Monitoring
 
 DAPS can monitor removable media activity including:
