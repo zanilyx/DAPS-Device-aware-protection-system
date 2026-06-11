@@ -11,10 +11,10 @@ def create_devices_table():
     CREATE TABLE IF NOT EXISTS devices(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         device_id TEXT UNIQUE,
+        device_type TEXT,
         hostname TEXT,
         mac_address TEXT,
         ip_address TEXT,
-        os_name TEXT,
         owner TEXT,
         registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )

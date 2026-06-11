@@ -15,7 +15,6 @@ def create_logs_table():
         device_id TEXT,
         file_id TEXT,
         action TEXT,
-        status TEXT,
         details TEXT
     )
     """)
@@ -23,10 +22,10 @@ def create_logs_table():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS usb_logs(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT UNIQUE,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        serial_number TEXT,
-        action TEXT,
-        username TEXT
+        username TEXT,
+        USB_Type TEXT
     )
     """)
 
