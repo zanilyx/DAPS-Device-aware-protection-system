@@ -15,7 +15,6 @@ def create_users_table():
         password_hash TEXT NOT NULL,
         role TEXT DEFAULT 'user',
         department TEXT,
-        status TEXT DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
