@@ -8,6 +8,8 @@ root_dir = Path(__file__).resolve().parent.parent
 if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 from User_base.users.authentication import verify_user
+from User_base.users.User_data import user_details
+
 
 
 class LoginPage(QWidget):
@@ -48,9 +50,7 @@ class LoginPage(QWidget):
         password = self.password_input.text()
 
         # Call authentication backend
-        user_data = verify_user(username, password)
-
-        if user_data:
-            self.login_success.emit(user_data)
+        if verify_user(username,password):
+            self.login_success.emit(user_details(username))
         else:
             QMessageBox.critical(self, "Error", "Invalid username or password.")

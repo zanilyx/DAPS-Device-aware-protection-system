@@ -14,6 +14,7 @@ class HomePage(QWidget):
     def set_user_info(self, user_data: dict):
         self.welcome_label.setText(
             f"Welcome, {user_data['username']}!\n"
+            f"Email: {user_data['email']}\n"
             f"Role: {user_data['role']}\n"
             f"Department: {user_data['department'] or 'None'}"
-        )
+    )

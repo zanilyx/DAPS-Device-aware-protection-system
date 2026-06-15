@@ -32,18 +32,13 @@ def verify_user(username: str, password_raw: str) -> dict | None:
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT id, username, role, department FROM users WHERE username = ? AND password_hash = ?",
+        "SELECT id, username FROM users WHERE username = ? AND password_hash = ?",
         (username, hashed_input),
     )
-    user = cursor.fetchone()
-    conn.close()
-
-    if user:
-        return {"id": user[0], "username": user[1], "role": user[2], "department": user[3]}
-    return None
+    return True if cursor.fetchone() else False
 
 
 if __name__ == "__main__":
     # Quick login test
-    user_session = verify_user("test_user", "secure_pass123")
+    user_session = verify_user("admin", "hash123")
     print("Login status:", "Success" if user_session else "Failed")
