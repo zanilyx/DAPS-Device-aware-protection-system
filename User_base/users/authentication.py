@@ -1,7 +1,9 @@
+from __future__ import annotations
 import hashlib
 import sqlite3
 import os
 from pathlib import Path
+
 
 # 1. Find the directory where this script lives
 current_dir = Path(__file__).resolve().parent.parent
