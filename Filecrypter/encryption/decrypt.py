@@ -4,18 +4,25 @@ import sqlite3
 import uuid
 import socket
 from datetime import datetime
-
+from pathlib import Path
 from PySide6.QtWidgets import QApplication, QFileDialog
 from Crypto.Cipher import AES
+
+
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+
+USERS_DB   = ROOT_DIR / "database" / "users.db"
+DEVICES_DB = ROOT_DIR / "database" / "devices.db"
+FILES_DB   = ROOT_DIR / "database" / "files.db"
+LOGS_DB    = ROOT_DIR / "database" / "logs.db"
+
 
 
 # ==================================================
 # CONFIG
 # ==================================================
 
-DB_PATH = "daps.db"
-
-CURRENT_USER = "piyush"      # Replace with login username
+CURRENT_USER = "admin"      # Replace with login username
 
 
 # ==================================================
@@ -50,16 +57,24 @@ def log_event(
         status,
         details=""):
 
-    conn = sqlite3.connect("database/logs.db")
+    conn = sqlite3.connect(LOGS_DB)
     cur = conn.cursor()
 
     cur.execute(
         """
-        INSERT INTO audit_logs
+        INSERT INTO logs
+        (
+            timestamp,
+            username,
+            file_id,
+            action,
+            status,
+            details
+        )
         VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
-            datetime.now(),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             username,
             file_id,
             action,
@@ -78,7 +93,7 @@ def log_event(
 
 def get_user_role(username):
 
-    conn = sqlite3.connect("database/users.db")
+    conn = sqlite3.connect(USERS_DB)
     cur = conn.cursor()
 
     cur.execute(
@@ -101,13 +116,13 @@ def verify_device(username):
 
     device_id = str(uuid.getnode())
 
-    conn = sqlite3.connect("database/devices.db")
+    conn = sqlite3.connect(DEVICES_DB)
     cur = conn.cursor()
 
     cur.execute(
         """
         SELECT device_id
-        FROM registered_devices
+        FROM devices
         WHERE username=?
         """,
         (username,)
@@ -117,7 +132,7 @@ def verify_device(username):
 
     conn.close()
 
-    return row and row[0] == device_id
+    return bool(row and row[0] == device_id)
 
 
 # ==================================================
@@ -126,13 +141,13 @@ def verify_device(username):
 
 def can_access_file(file_id, role):
 
-    conn = sqlite3.connect("database/files.db")
+    conn = sqlite3.connect(FILES_DB)
     cur = conn.cursor()
 
     cur.execute(
         """
         SELECT role_name
-        FROM file_permissions
+        FROM files
         WHERE file_id=?
         """,
         (file_id,)
@@ -151,7 +166,7 @@ def can_access_file(file_id, role):
 
 def get_file_id(filename):
 
-    conn = sqlite3.connect("database/files.db")
+    conn = sqlite3.connect(FILES_DB)
     cur = conn.cursor()
 
     cur.execute(
@@ -196,7 +211,9 @@ def decrypt_file(file_path=None):
         # Get File ID
         # -----------------------------------
 
-        file_id = get_file_id(file_path)
+        file_name = os.path.basename(file_path)
+
+        file_id = get_file_id(file_name)
 
         if not file_id:
 
