@@ -1,51 +1,66 @@
-import hashlib
-import os
 import sqlite3
+import uuid
+from pathlib import Path
+import sys
 
-# Update this path if your users.db is in a different root folder!
-DB_NAME = "users.db"
+root_dir = Path(__file__).resolve().parent.parent
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
 
-
-def hash_password(password: str) -> str:
-    """Hashes a password using SHA-256 (outputs lowercase hex string)."""
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
-
-def add_test_user(username, email, raw_password, role="user", department=None):
-    # 1. Securely hash the plain-text password
-    hashed_password = hash_password(raw_password)
-
-    # 2. Connect to the SQLite database
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    try:
-        # 3. Insert matching your exact column names
-        cursor.execute(
-            """
-            INSERT INTO users (username, email, password_hash, role, department)
-            VALUES (?, ?, ?, ?, ?)
-        """,
-            (username, email, hashed_password, role, department),
-        )
-
-        conn.commit()
-        print(f"Successfully created user '{username}'!")
-        print(f"Stored Hash in DB: {hashed_password}")
-
-    except sqlite3.IntegrityError:
-        print(f"Error: Username '{username}' already exists in the database.")
-    finally:
-        conn.close()
+from Filecrypter.encryption.encrypt import encrypt_file
 
 
-if __name__ == "__main__":
-    # Example: Creating your test user
-    # This will hash 'hash123' into '673d190b758967621da243f06c350ce68be4276174dc886560239fea923d4a5a'
-    add_test_user(
-        username="test_user",
-        email="test@example.com",
-        raw_password="hash123",
-        role="admin",  # You mentioned adding your own roles/permissions later
-        department="IT",
+DB_FILE = "files.db"
+
+
+def add_encrypted_file(
+    file_path,
+    classification="Confidential",
+    department="IT",
+    role="Admin",
+    access_type="Read/Write",
+    owner="Ritesh"
+):
+    # Encrypt using your existing function
+    encrypted_path = encrypt_file(file_path)
+
+    file_id = str(uuid.uuid4())
+
+    conn = sqlite3.connect(DB_FILE)
+    cur = conn.cursor()
+
+    cur.execute("""
+    INSERT INTO files (
+        file_id,
+        filename,
+        path,
+        classification,
+        department,
+        role,
+        access_type,
+        encryption_status,
+        owner
     )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        file_id,
+        Path(encrypted_path).name,
+        str(encrypted_path),
+        classification,
+        department,
+        role,
+        access_type,
+        "Encrypted",
+        owner
+    ))
+
+    conn.commit()
+    conn.close()
+
+    return file_id
+
+
+# Example
+if __name__ == "__main__":
+    file_id = add_encrypted_file("test.txt")
+    print("Stored:", file_id)
