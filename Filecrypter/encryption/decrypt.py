@@ -123,7 +123,7 @@ def verify_device(username):
         """
         SELECT device_id
         FROM devices
-        WHERE username=?
+        WHERE owner=?
         """,
         (username,)
     )
@@ -131,7 +131,6 @@ def verify_device(username):
     row = cur.fetchone()
 
     conn.close()
-
     return bool(row and row[0] == device_id)
 
 
@@ -146,7 +145,7 @@ def can_access_file(file_id, role):
 
     cur.execute(
         """
-        SELECT role_name
+        SELECT role
         FROM files
         WHERE file_id=?
         """,
@@ -154,7 +153,7 @@ def can_access_file(file_id, role):
     )
 
     roles = [r[0] for r in cur.fetchall()]
-
+    print(roles)
     conn.close()
 
     return role in roles
@@ -173,7 +172,7 @@ def get_file_id(filename):
         """
         SELECT id
         FROM files
-        WHERE encrypted_name=?
+        WHERE filename=?
         """,
         (filename,)
     )
@@ -219,13 +218,13 @@ def decrypt_file(file_path=None):
 
             print("File not registered in database.")
 
-            log_event(
-                CURRENT_USER,
-                0,
-                "DECRYPT",
-                "FAILED",
-                "Unknown File"
-            )
+            # log_event(
+            #     CURRENT_USER,
+            #     0,
+            #     "DECRYPT",
+            #     "FAILED",
+            #     "Unknown File"
+            # )
 
             return None
 
@@ -239,13 +238,13 @@ def decrypt_file(file_path=None):
 
             print("User not found.")
 
-            log_event(
-                CURRENT_USER,
-                file_id,
-                "DECRYPT",
-                "FAILED",
-                "User Not Found"
-            )
+            # log_event(
+            #     CURRENT_USER,
+            #     file_id,
+            #     "DECRYPT",
+            #     "FAILED",
+            #     "User Not Found"
+            # )
 
             return None
 
@@ -257,13 +256,13 @@ def decrypt_file(file_path=None):
 
             print("Access Denied: Unregistered Device")
 
-            log_event(
-                CURRENT_USER,
-                file_id,
-                "DECRYPT",
-                "DENIED",
-                "Invalid Device"
-            )
+            # log_event(
+            #     CURRENT_USER,
+            #     file_id,
+            #     "DECRYPT",
+            #     "DENIED",
+            #     "Invalid Device"
+            # )
 
             return None
 
@@ -275,13 +274,13 @@ def decrypt_file(file_path=None):
 
             print("Access Denied: Role Not Authorized")
 
-            log_event(
-                CURRENT_USER,
-                file_id,
-                "DECRYPT",
-                "DENIED",
-                f"Role={user_role}"
-            )
+            # log_event(
+            #     CURRENT_USER,
+            #     file_id,
+            #     "DECRYPT",
+            #     "DENIED",
+            #     f"Role={user_role}"
+            # )
 
             return None
 
@@ -325,13 +324,13 @@ def decrypt_file(file_path=None):
 
         print("Decryption Successful")
 
-        log_event(
-            CURRENT_USER,
-            file_id,
-            "DECRYPT",
-            "SUCCESS",
-            f"Role={user_role}"
-        )
+        # log_event(
+        #     CURRENT_USER,
+        #     file_id,
+        #     "DECRYPT",
+        #     "SUCCESS",
+        #     f"Role={user_role}"
+        # )
 
         return output_path
 
@@ -339,13 +338,13 @@ def decrypt_file(file_path=None):
 
         print(f"Decryption Error: {e}")
 
-        log_event(
-            CURRENT_USER,
-            0,
-            "DECRYPT",
-            "FAILED",
-            str(e)
-        )
+        # log_event(
+        #     CURRENT_USER,
+        #     0,
+        #     "DECRYPT",
+        #     "FAILED",
+        #     str(e)
+        # )
 
         return None
 
