@@ -17,15 +17,6 @@ DEVICES_DB = ROOT_DIR / "database" / "devices.db"
 FILES_DB   = ROOT_DIR / "database" / "files.db"
 LOGS_DB    = ROOT_DIR / "database" / "logs.db"
 
-
-
-# ==================================================
-# CONFIG
-# ==================================================
-
-CURRENT_USER = "joy"      # Replace with login username
-
-
 # ==================================================
 # AES KEY
 # ==================================================
@@ -203,7 +194,7 @@ def get_file_id(filename):
 # MAIN DECRYPTION
 # ==================================================
 
-def decrypt_file(file_path=None):
+def decrypt_file(username, file_path=None):
 
     if not file_path:
 
@@ -234,7 +225,7 @@ def decrypt_file(file_path=None):
             print("File not registered in database.")
 
             log_event(
-                CURRENT_USER,
+                username,
                 "UNKNOWN",
                 "DECRYPT_FAILED",
                 "Unknown File"
@@ -246,14 +237,14 @@ def decrypt_file(file_path=None):
         # User Role Check
         # -----------------------------------
 
-        user_role = get_user_role(CURRENT_USER)
+        user_role = get_user_role(username)
 
         if not user_role:
 
             print("User not found.")
 
             log_event(
-                CURRENT_USER,
+                username,
                 file_id,
                 "DECRYPT_FAILED",
                 "User Not Found"
@@ -265,12 +256,12 @@ def decrypt_file(file_path=None):
         # Device Check
         # -----------------------------------
 
-        if not verify_device(CURRENT_USER):
+        if not verify_device(username):
 
             print("Access Denied: Unregistered Device")
 
             log_event(
-                CURRENT_USER,
+                username,
                 file_id,
                 "DECRYPT_DENIED",
                 "Invalid Device"
@@ -287,7 +278,7 @@ def decrypt_file(file_path=None):
             print("Access Denied: Role Not Authorized")
 
             log_event(
-                CURRENT_USER,
+                username,
                 file_id,
                 "DECRYPT_DENIED",
                 f"Unauthorized Role={user_role}"
@@ -306,7 +297,7 @@ def decrypt_file(file_path=None):
             print("Encryption key not found.")
 
             log_event(
-                CURRENT_USER,
+                username,
                 file_id,
                 "DECRYPT_FAILED",
                 "AES key not found"
@@ -349,7 +340,7 @@ def decrypt_file(file_path=None):
         print("Decryption Successful")
 
         log_event(
-            CURRENT_USER,
+            username,
             file_id,
             "DECRYPT_SUCCESS",
             f"Role={user_role}"
@@ -362,7 +353,7 @@ def decrypt_file(file_path=None):
         print(f"Decryption Error: {e}")
 
         log_event(
-            CURRENT_USER,
+            username,
             file_id if 'file_id' in locals() else "UNKNOWN",
             "DECRYPT_FAILED",
             str(e)
@@ -379,7 +370,7 @@ if __name__ == "__main__":
 
     path_arg = sys.argv[1] if len(sys.argv) > 1 else None
 
-    result = decrypt_file(path_arg)
+    result = decrypt_file("joy", path_arg)
 
     if result:
         print(f"Recovered File: {result}")

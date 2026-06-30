@@ -1,11 +1,38 @@
 import os
 import sys
+from pathlib import Path
 from PySide6.QtWidgets import QApplication, QFileDialog
 from Crypto.Cipher import AES
+import sqlite3
+import base64
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
-def get_aes_key():
-    secret_input = "my_super_secret_key_password_123" 
-    return secret_input.ljust(32, '0')[:32].encode('utf-8')
+USERS_DB   = ROOT_DIR / "database" / "users.db"
+DEVICES_DB = ROOT_DIR / "database" / "devices.db"
+FILES_DB   = ROOT_DIR / "database" / "files.db"
+LOGS_DB    = ROOT_DIR / "database" / "logs.db"
+def get_aes_key(file_id):
+
+    conn = sqlite3.connect(FILES_DB)
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT aes_key
+        FROM files
+        WHERE file_id=?
+        """,
+        (file_id,)
+    )
+
+    row = cur.fetchone()
+
+    conn.close()
+
+    if row is None:
+        return None
+
+    return base64.b64decode(row[0])
 
 def encrypt_file(file_path=None):
     if not file_path:

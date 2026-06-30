@@ -309,7 +309,7 @@ class HomePage(QWidget):
 
     def _on_fetch(self):
         try:
-            result = decrypt_file()
+            result = decrypt_file(self.username)
             if result:
                 print(f"Decrypted: {result}")
         except Exception as e:
@@ -317,6 +317,6 @@ class HomePage(QWidget):
 
     def set_user_info(self, user_data: dict):
         self._user_data = user_data
-        username = user_data.get("username", "User")
-        self._greeting.setText(f"Welcome back, {username}.")
+        self.username = user_data.get("username", "User")
+        self._greeting.setText(f"Welcome back, {self.username}.")
         self._panel.set_user(user_data)
