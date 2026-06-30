@@ -16,20 +16,20 @@ USERS_DB   = ROOT_DIR / "database" / "users.db"
 DEVICES_DB = ROOT_DIR / "database" / "devices.db"
 FILES_DB   = ROOT_DIR / "database" / "files.db"
 LOGS_DB    = ROOT_DIR / "database" / "logs.db"
-
+KEYS_DB    = ROOT_DIR / "database" / "keys.db"
 # ==================================================
 # AES KEY
 # ==================================================
 
 def get_aes_key(file_id):
 
-    conn = sqlite3.connect(FILES_DB)
+    conn = sqlite3.connect(KEYS_DB)
     cur = conn.cursor()
 
     cur.execute(
         """
         SELECT aes_key
-        FROM files
+        FROM keys
         WHERE file_id=?
         """,
         (file_id,)
@@ -72,7 +72,7 @@ def log_event(
 
     cur.execute(
         """
-        INSERT INTO audit_logs
+        INSERT INTO logs
         (
             timestamp,
             username,
@@ -92,6 +92,23 @@ def log_event(
             details
         )
     )
+
+    conn.commit()
+    conn.close()
+
+# ==================================================
+# LAST ACCESSED
+# ==================================================
+def last_accessed(file_id):
+
+    conn = sqlite3.connect(KEYS_DB)
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE keys
+        SET last_accessed = CURRENT_TIMESTAMP
+        WHERE file_id = ?
+    """, (file_id,))
 
     conn.commit()
     conn.close()
@@ -345,7 +362,7 @@ def decrypt_file(username, file_path=None):
             "DECRYPT_SUCCESS",
             f"Role={user_role}"
         )
-
+        last_accessed(file_id)
         return output_path
 
     except Exception as e:

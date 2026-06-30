@@ -1,44 +1,22 @@
 import sqlite3
-import socket
-import uuid
+from pathlib import Path
 
-def get_mac_address():
-    mac = uuid.getnode()
-    return ':'.join(
-        f'{(mac >> ele) & 0xff:02x}'
-        for ele in range(40, -1, -8)
-    )
+DB_PATH = Path(__file__).parent / "keys.db"
 
-def get_local_ip():
-    try:
-        return socket.gethostbyname(socket.gethostname())
-    except:
-        return "Unknown"
-
-
-conn = sqlite3.connect("devices.db")
+conn = sqlite3.connect(DB_PATH)
 cur = conn.cursor()
 
 cur.execute("""
-INSERT INTO devices
-(
-    device_id,
-    device_type,
-    hostname,
-    mac_address,
-    ip_address,
-    owner
+CREATE TABLE IF NOT EXISTS keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id TEXT NOT NULL UNIQUE,
+    aes_key TEXT NOT NULL,
+    owner TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
-VALUES (?, ?, ?, ?, ?, ?)
-""",
-(
-    str(uuid.getnode()),
-    "Laptop",
-    socket.gethostname(),
-    get_mac_address(),
-    get_local_ip(),
-    "admin"
-))
+""")
 
 conn.commit()
 conn.close()
+
+print("keys.db initialized successfully.")

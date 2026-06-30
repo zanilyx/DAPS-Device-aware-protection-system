@@ -301,7 +301,7 @@ class HomePage(QWidget):
     def _on_upload(self):
         # Import here so the path can be adjusted by the user
         try:
-            result = encrypt_file()
+            result = encrypt_file(self.username)
             if result:
                 print(f"Encrypted: {result}")
         except Exception as e:
