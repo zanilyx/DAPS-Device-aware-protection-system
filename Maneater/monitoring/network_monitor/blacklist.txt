@@ -1,2 +1,3 @@
-# Blacklisted IP Addresses
+# Suspicious IPs
+45.45.45.45
 10.10.10.10
