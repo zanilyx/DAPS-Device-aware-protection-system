@@ -3,3 +3,4 @@ rich
 psutil
 colorama
 netifaces
+requests

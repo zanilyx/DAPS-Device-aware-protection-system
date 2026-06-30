@@ -1,0 +1,9 @@
+{
+    "refresh_rate": 1,
+    "capture_filter": "",
+    "resolve_hostnames": false,
+    "track_ipv6": true,
+    "ignore_loopback": true,
+    "upload_alert_mb": 50,
+    "dashboard_sort": "upload"
+}
