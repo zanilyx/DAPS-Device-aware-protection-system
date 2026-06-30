@@ -1,0 +1,2 @@
+# Blacklisted IP Addresses
+10.10.10.10
