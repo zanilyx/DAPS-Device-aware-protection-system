@@ -3,6 +3,7 @@ import sys
 import sqlite3
 import uuid
 import socket
+import base64
 from datetime import datetime
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QFileDialog
@@ -22,16 +23,35 @@ LOGS_DB    = ROOT_DIR / "database" / "logs.db"
 # CONFIG
 # ==================================================
 
-CURRENT_USER = "admin"      # Replace with login username
+CURRENT_USER = "joy"      # Replace with login username
 
 
 # ==================================================
 # AES KEY
 # ==================================================
 
-def get_aes_key():
-    secret_input = "my_super_secret_key_password_123"
-    return secret_input.ljust(32, '0')[:32].encode('utf-8')
+def get_aes_key(file_id):
+
+    conn = sqlite3.connect(FILES_DB)
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT aes_key
+        FROM files
+        WHERE file_id=?
+        """,
+        (file_id,)
+    )
+
+    row = cur.fetchone()
+
+    conn.close()
+
+    if not row:
+        return None
+
+    return base64.b64decode(row[0])
 
 
 # ==================================================
@@ -54,7 +74,6 @@ def log_event(
         username,
         file_id,
         action,
-        status,
         details=""):
 
     conn = sqlite3.connect(LOGS_DB)
@@ -62,13 +81,13 @@ def log_event(
 
     cur.execute(
         """
-        INSERT INTO logs
+        INSERT INTO audit_logs
         (
             timestamp,
             username,
+            device_id,
             file_id,
             action,
-            status,
             details
         )
         VALUES (?, ?, ?, ?, ?, ?)
@@ -76,17 +95,15 @@ def log_event(
         (
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             username,
+            str(uuid.getnode()),
             file_id,
             action,
-            status,
             details
         )
     )
 
     conn.commit()
     conn.close()
-
-
 # ==================================================
 # USER ROLE
 # ==================================================
@@ -153,7 +170,6 @@ def can_access_file(file_id, role):
     )
 
     roles = [r[0] for r in cur.fetchall()]
-    print(roles)
     conn.close()
 
     return role in roles
@@ -170,7 +186,7 @@ def get_file_id(filename):
 
     cur.execute(
         """
-        SELECT id
+        SELECT file_id
         FROM files
         WHERE filename=?
         """,
@@ -180,7 +196,6 @@ def get_file_id(filename):
     row = cur.fetchone()
 
     conn.close()
-
     return row[0] if row else None
 
 
@@ -218,13 +233,12 @@ def decrypt_file(file_path=None):
 
             print("File not registered in database.")
 
-            # log_event(
-            #     CURRENT_USER,
-            #     0,
-            #     "DECRYPT",
-            #     "FAILED",
-            #     "Unknown File"
-            # )
+            log_event(
+                CURRENT_USER,
+                "UNKNOWN",
+                "DECRYPT_FAILED",
+                "Unknown File"
+            )
 
             return None
 
@@ -238,13 +252,12 @@ def decrypt_file(file_path=None):
 
             print("User not found.")
 
-            # log_event(
-            #     CURRENT_USER,
-            #     file_id,
-            #     "DECRYPT",
-            #     "FAILED",
-            #     "User Not Found"
-            # )
+            log_event(
+                CURRENT_USER,
+                file_id,
+                "DECRYPT_FAILED",
+                "User Not Found"
+            )
 
             return None
 
@@ -256,13 +269,12 @@ def decrypt_file(file_path=None):
 
             print("Access Denied: Unregistered Device")
 
-            # log_event(
-            #     CURRENT_USER,
-            #     file_id,
-            #     "DECRYPT",
-            #     "DENIED",
-            #     "Invalid Device"
-            # )
+            log_event(
+                CURRENT_USER,
+                file_id,
+                "DECRYPT_DENIED",
+                "Invalid Device"
+            )
 
             return None
 
@@ -274,13 +286,12 @@ def decrypt_file(file_path=None):
 
             print("Access Denied: Role Not Authorized")
 
-            # log_event(
-            #     CURRENT_USER,
-            #     file_id,
-            #     "DECRYPT",
-            #     "DENIED",
-            #     f"Role={user_role}"
-            # )
+            log_event(
+                CURRENT_USER,
+                file_id,
+                "DECRYPT_DENIED",
+                f"Unauthorized Role={user_role}"
+            )
 
             return None
 
@@ -288,7 +299,20 @@ def decrypt_file(file_path=None):
         # AES Decryption
         # -----------------------------------
 
-        key = get_aes_key()
+        key = get_aes_key(file_id)
+
+        if key is None:
+
+            print("Encryption key not found.")
+
+            log_event(
+                CURRENT_USER,
+                file_id,
+                "DECRYPT_FAILED",
+                "AES key not found"
+            )
+
+            return None
 
         with open(file_path, "rb") as f:
 
@@ -324,13 +348,12 @@ def decrypt_file(file_path=None):
 
         print("Decryption Successful")
 
-        # log_event(
-        #     CURRENT_USER,
-        #     file_id,
-        #     "DECRYPT",
-        #     "SUCCESS",
-        #     f"Role={user_role}"
-        # )
+        log_event(
+            CURRENT_USER,
+            file_id,
+            "DECRYPT_SUCCESS",
+            f"Role={user_role}"
+        )
 
         return output_path
 
@@ -338,13 +361,12 @@ def decrypt_file(file_path=None):
 
         print(f"Decryption Error: {e}")
 
-        # log_event(
-        #     CURRENT_USER,
-        #     0,
-        #     "DECRYPT",
-        #     "FAILED",
-        #     str(e)
-        # )
+        log_event(
+            CURRENT_USER,
+            file_id if 'file_id' in locals() else "UNKNOWN",
+            "DECRYPT_FAILED",
+            str(e)
+        )
 
         return None
 
