@@ -13,7 +13,6 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 USERS_DB   = ROOT_DIR / "database" / "users.db"
 DEVICES_DB = ROOT_DIR / "database" / "devices.db"
 FILES_DB   = ROOT_DIR / "database" / "files.db"
-LOGS_DB    = ROOT_DIR / "database" / "logs.db"
 KEYS_DB    = ROOT_DIR / "database" / "keys.db"
 
 

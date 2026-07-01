@@ -66,7 +66,7 @@ def log_event(
         file_id,
         action,
         details=""):
-
+    print(LOGS_DB)
     conn = sqlite3.connect(LOGS_DB)
     cur = conn.cursor()
 
