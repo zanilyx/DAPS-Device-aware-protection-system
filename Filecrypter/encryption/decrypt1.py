@@ -1,36 +1,22 @@
 import os
 import sys
-import json
+import sqlite3
 import uuid
 import socket
-import sqlite3
 import base64
-
 from datetime import datetime
 from pathlib import Path
-
-from PySide6.QtWidgets import (
-    QApplication,
-    QFileDialog,
-    QMessageBox
-)
-
+from PySide6.QtWidgets import QApplication, QFileDialog
 from Crypto.Cipher import AES
 
 
-# ==================================================
-# DATABASE PATHS
-# ==================================================
-
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
-USERS_DB = ROOT_DIR / "database" / "users.db"
+USERS_DB   = ROOT_DIR / "database" / "users.db"
 DEVICES_DB = ROOT_DIR / "database" / "devices.db"
-FILES_DB = ROOT_DIR / "database" / "files.db"
-LOGS_DB = ROOT_DIR / "database" / "logs.db"
-KEYS_DB = ROOT_DIR / "database" / "keys.db"
-
-
+FILES_DB   = ROOT_DIR / "database" / "files.db"
+LOGS_DB    = ROOT_DIR / "database" / "logs.db"
+KEYS_DB    = ROOT_DIR / "database" / "keys.db"
 # ==================================================
 # AES KEY
 # ==================================================
@@ -38,31 +24,23 @@ KEYS_DB = ROOT_DIR / "database" / "keys.db"
 def get_aes_key(file_id):
 
     conn = sqlite3.connect(KEYS_DB)
-
     cur = conn.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT aes_key
         FROM keys
         WHERE file_id=?
-    """, (file_id,))
+        """,
+        (file_id,)
+    )
 
     row = cur.fetchone()
 
-    if not row:
-
-        conn.close()
-        return None
-
-    cur.execute("""
-        UPDATE keys
-        SET last_accessed=CURRENT_TIMESTAMP
-        WHERE file_id=?
-    """, (file_id,))
-
-    conn.commit()
-
     conn.close()
+
+    if not row:
+        return None
 
     return base64.b64decode(row[0])
 
@@ -72,17 +50,15 @@ def get_aes_key(file_id):
 # ==================================================
 
 def get_device_id():
-
     return str(uuid.getnode())
 
 
 def get_hostname():
-
     return socket.gethostname()
 
 
 # ==================================================
-# AUDIT LOG
+# AUDIT LOGGING
 # ==================================================
 
 def log_event(
@@ -90,12 +66,12 @@ def log_event(
         file_id,
         action,
         details=""):
-
+    print(LOGS_DB)
     conn = sqlite3.connect(LOGS_DB)
-
     cur = conn.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         INSERT INTO audit_logs
         (
             timestamp,
@@ -106,20 +82,36 @@ def log_event(
             details
         )
         VALUES (?, ?, ?, ?, ?, ?)
-    """,
-    (
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        username,
-        get_device_id(),
-        file_id,
-        action,
-        details
-    ))
+        """,
+        (
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            username,
+            str(uuid.getnode()),
+            file_id,
+            action,
+            details
+        )
+    )
 
     conn.commit()
     conn.close()
 
+# ==================================================
+# LAST ACCESSED
+# ==================================================
+def last_accessed(file_id):
 
+    conn = sqlite3.connect(KEYS_DB)
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE keys
+        SET last_accessed = CURRENT_TIMESTAMP
+        WHERE file_id = ?
+    """, (file_id,))
+
+    conn.commit()
+    conn.close()
 # ==================================================
 # USER ROLE
 # ==================================================
@@ -127,86 +119,75 @@ def log_event(
 def get_user_role(username):
 
     conn = sqlite3.connect(USERS_DB)
-
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT role
-        FROM users
-        WHERE username=?
-    """, (username,))
+    cur.execute(
+        "SELECT role FROM users WHERE username=?",
+        (username,)
+    )
 
     row = cur.fetchone()
 
     conn.close()
 
-    if row:
-        return row[0]
-
-    return None
+    return row[0] if row else None
 
 
 # ==================================================
-# DEVICE VERIFICATION
+# DEVICE CHECK
 # ==================================================
 
 def verify_device(username):
 
-    current_device = str(uuid.getnode())
+    device_id = str(uuid.getnode())
+    print("Current Username :", username)
+    print("Current Device ID:", device_id)
 
     conn = sqlite3.connect(DEVICES_DB)
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT device_id
+        SELECT owner, device_id
         FROM devices
-        WHERE owner = ?
-    """, (username,))
+    """)
 
     rows = cur.fetchall()
 
+    print("Database contents:")
+    for row in rows:
+        print(row)
+
     conn.close()
 
-    for (device_id,) in rows:
-        if str(device_id) == current_device:
+    for owner, db_device in rows:
+        if owner == username and db_device == device_id:
             return True
 
     return False
 
 
 # ==================================================
-# ROLE ACCESS
+# FILE ACCESS CHECK
 # ==================================================
 
-def can_access_file(file_id, user_role):
+def can_access_file(file_id, role):
 
     conn = sqlite3.connect(FILES_DB)
-
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT allowed_roles
+    cur.execute(
+        """
+        SELECT role
         FROM files
         WHERE file_id=?
-    """, (file_id,))
+        """,
+        (file_id,)
+    )
 
-    row = cur.fetchone()
-
+    roles = [r[0] for r in cur.fetchall()]
     conn.close()
 
-    if not row:
-
-        return False
-
-    try:
-
-        allowed_roles = json.loads(row[0])
-
-    except Exception:
-
-        return False
-
-    return user_role in allowed_roles
+    return role in roles
 
 
 # ==================================================
@@ -216,23 +197,22 @@ def can_access_file(file_id, user_role):
 def get_file_id(filename):
 
     conn = sqlite3.connect(FILES_DB)
-
     cur = conn.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT file_id
         FROM files
         WHERE filename=?
-    """, (filename,))
+        """,
+        (filename,)
+    )
 
     row = cur.fetchone()
 
     conn.close()
+    return row[0] if row else None
 
-    if row:
-        return row[0]
-
-    return None
 
 # ==================================================
 # MAIN DECRYPTION
@@ -246,7 +226,7 @@ def decrypt_file(username, file_path=None):
 
         file_path, _ = QFileDialog.getOpenFileName(
             None,
-            "Select Encrypted File",
+            "Select File to Decrypt",
             "",
             "TVK Files (*.tvk)"
         )
@@ -256,21 +236,17 @@ def decrypt_file(username, file_path=None):
 
     try:
 
-        # ------------------------------------------
+        # -----------------------------------
         # Get File ID
-        # ------------------------------------------
+        # -----------------------------------
 
-        filename = os.path.basename(file_path)
+        file_name = os.path.basename(file_path)
 
-        file_id = get_file_id(filename)
+        file_id = get_file_id(file_name)
 
-        if file_id is None:
+        if not file_id:
 
-            QMessageBox.warning(
-                None,
-                "Error",
-                "File is not registered in the database."
-            )
+            print("File not registered in database.")
 
             log_event(
                 username,
@@ -281,115 +257,90 @@ def decrypt_file(username, file_path=None):
 
             return None
 
-        # ------------------------------------------
-        # User Role
-        # ------------------------------------------
+        # -----------------------------------
+        # User Role Check
+        # -----------------------------------
 
         user_role = get_user_role(username)
 
-        if user_role is None:
+        if not user_role:
 
-            QMessageBox.warning(
-                None,
-                "Error",
-                "User not found."
-            )
+            print("User not found.")
 
             log_event(
                 username,
                 file_id,
                 "DECRYPT_FAILED",
-                "Unknown User"
+                "User Not Found"
             )
 
             return None
 
-        # ------------------------------------------
-        # Device Verification
-        # ------------------------------------------
+        # -----------------------------------
+        # Device Check
+        # -----------------------------------
 
         if not verify_device(username):
 
-            QMessageBox.warning(
-                None,
-                "Access Denied",
-                "This device is not registered."
-            )
+            print("Access Denied: Unregistered Device")
 
             log_event(
                 username,
                 file_id,
-                "DEVICE_DENIED",
-                "Unregistered Device"
+                "DECRYPT_DENIED",
+                "Invalid Device"
             )
 
             return None
 
-        # ------------------------------------------
-        # Role Verification
-        # ------------------------------------------
+        # -----------------------------------
+        # Role Check
+        # -----------------------------------
 
         if not can_access_file(file_id, user_role):
 
-            QMessageBox.warning(
-                None,
-                "Access Denied",
-                f"{user_role} does not have permission to access this file."
-            )
+            print("Access Denied: Role Not Authorized")
 
             log_event(
                 username,
                 file_id,
-                "ROLE_DENIED",
-                user_role
+                "DECRYPT_DENIED",
+                f"Unauthorized Role={user_role}"
             )
 
             return None
 
-        # ------------------------------------------
-        # AES Key
-        # ------------------------------------------
+        # -----------------------------------
+        # AES Decryption
+        # -----------------------------------
 
         key = get_aes_key(file_id)
 
         if key is None:
 
-            QMessageBox.warning(
-                None,
-                "Error",
-                "Encryption key not found."
-            )
+            print("Encryption key not found.")
 
             log_event(
                 username,
                 file_id,
                 "DECRYPT_FAILED",
-                "AES Key Missing"
+                "AES key not found"
             )
 
             return None
 
-        # ------------------------------------------
-        # Read TVK File
-        # ------------------------------------------
-
         with open(file_path, "rb") as f:
 
-            extension = f.read(16)
-
+            ext_encoded = f.read(16)
             nonce = f.read(16)
-
             tag = f.read(16)
-
             ciphertext = f.read()
 
-        extension = extension.decode(
-            "utf-8"
-        ).rstrip("\x00")
-
-        # ------------------------------------------
-        # AES Decryption
-        # ------------------------------------------
+        original_extension = (
+            ext_encoded
+            .decode("utf-8")
+            .rstrip("\x00")
+        )
 
         cipher = AES.new(
             key,
@@ -404,16 +355,13 @@ def decrypt_file(username, file_path=None):
 
         output_path = (
             os.path.splitext(file_path)[0]
-            + extension
+            + original_extension
         )
 
         with open(output_path, "wb") as f:
-
             f.write(decrypted_data)
 
-        # ------------------------------------------
-        # Audit Log
-        # ------------------------------------------
+        print("Decryption Successful")
 
         log_event(
             username,
@@ -421,27 +369,17 @@ def decrypt_file(username, file_path=None):
             "DECRYPT_SUCCESS",
             f"Role={user_role}"
         )
-
-        QMessageBox.information(
-            None,
-            "Success",
-            f"File decrypted successfully.\n\n{output_path}"
-        )
-
+        last_accessed(file_id)
         return output_path
 
     except Exception as e:
 
+        print(f"Decryption Error: {e}")
+
         log_event(
             username,
-            file_id if "file_id" in locals() else "UNKNOWN",
+            file_id if 'file_id' in locals() else "UNKNOWN",
             "DECRYPT_FAILED",
-            str(e)
-        )
-
-        QMessageBox.critical(
-            None,
-            "Decryption Failed",
             str(e)
         )
 
@@ -450,14 +388,13 @@ def decrypt_file(username, file_path=None):
 
 # ==================================================
 # RUN
-# ==================================================
+# ================================================== 
 
 if __name__ == "__main__":
 
-    path = sys.argv[1] if len(sys.argv) > 1 else None
+    path_arg = sys.argv[1] if len(sys.argv) > 1 else None
 
-    result = decrypt_file("admin", path)
+    result = decrypt_file("joy", path_arg)
 
     if result:
-
-        print(result)
+        print(f"Recovered File: {result}")

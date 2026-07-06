@@ -1,11 +1,10 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QSizePolicy, QPushButton,
-    QGraphicsOpacityEffect,
+    QGraphicsOpacityEffect, QMessageBox,
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect, Property
 from PySide6.QtGui import QColor
-
 import os
 import sys
 from pathlib import Path
@@ -124,7 +123,7 @@ class HomePage(QWidget):
         super().__init__()
         self.setStyleSheet(f"background-color: {BG_DEEP};")
         self._user_data = {}
-
+        self.username = ""
         root = QVBoxLayout(self)
         root.setContentsMargins(48, 40, 48, 48)
         root.setSpacing(0)
@@ -299,21 +298,78 @@ class HomePage(QWidget):
             self._sub.setText("Click ▾ to view your account details.")
 
     def _on_upload(self):
-        # Import here so the path can be adjusted by the user
+
+        if not self.username:
+            return
+
         try:
-            result = encrypt_file(self.username)
-            if result:
-                print(f"Encrypted: {result}")
+
+            encrypted_file = encrypt_file(self.username)
+
+            if encrypted_file:
+
+                print("Encrypted Successfully")
+
+                QMessageBox.information(
+
+                    self,
+
+                    "Success",
+
+                    f"Encrypted File Stored Successfully\n\n{encrypted_file}"
+
+                )
+
         except Exception as e:
-            print(f"Upload error: {e}")
+
+            print("Upload Error")
+
+            QMessageBox.critical(
+
+                self,
+
+                "Error",
+
+                str(e)
+
+            )
 
     def _on_fetch(self):
+
+        if not self.username:
+            return
+
         try:
-            result = decrypt_file(self.username)
-            if result:
-                print(f"Decrypted: {result}")
+
+            decrypted_file = decrypt_file(self.username)
+
+            if decrypted_file:
+
+                print("Decrypted Successfully")
+
+                QMessageBox.information(
+
+                    self,
+
+                    "Success",
+
+                    f"Recovered File\n\n{decrypted_file}"
+
+                )
+
         except Exception as e:
-            print(f"Fetch error: {e}")
+
+            print("Fetch Error")
+
+            QMessageBox.critical(
+
+                self,
+
+                "Error",
+
+                str(e)
+
+            )
 
     def set_user_info(self, user_data: dict):
         self._user_data = user_data
