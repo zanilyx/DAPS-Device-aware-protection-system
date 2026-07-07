@@ -1,38 +1,89 @@
 import sqlite3
-import hashlib
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "devices.db"
+# ==========================================================
+# DATABASE PATH
+# ==========================================================
 
-conn = sqlite3.connect(DB_PATH)
-cursor = conn.cursor()
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
+DB = ROOT_DIR / "database" / "devices.db"
 
+# ==========================================================
+# CONNECT
+# ==========================================================
 
-device_string = "0781|5581|SanDisk|USB123456789"
-device_hash = hashlib.sha256(device_string.encode()).hexdigest()
+conn = sqlite3.connect(DB)
+cur = conn.cursor()
 
-# Insert test record
-cursor.execute("""
-INSERT OR IGNORE INTO usb_devices (
-    serial_number,
-    vid,
-    pid,
+# ==========================================================
+# CREATE USB TABLE
+# ==========================================================
+
+cur.execute("""
+
+CREATE TABLE IF NOT EXISTS usb_devices (
+
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    device_id TEXT UNIQUE NOT NULL,
+
+    manufacturer TEXT NOT NULL,
+
+    device_name TEXT NOT NULL,
+
+    model TEXT NOT NULL,
+
+    pnp_device_id TEXT NOT NULL,
+
+    owner TEXT NOT NULL,
+
+    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+)
+
+""")
+
+# ==========================================================
+# INSERT TEST DEVICE
+# ==========================================================
+
+cur.execute("""
+
+INSERT OR IGNORE INTO usb_devices
+(
+    device_id,
     manufacturer,
     device_name,
+    model,
+    pnp_device_id,
     owner
 )
-VALUES (?, ?, ?, ?, ?, ?)
-""", (
-    device_hash,
-    "0781",
-    "5581",
-    "SanDisk",
-    "SanDisk Ultra USB 3.0",
+
+VALUES
+(
+    ?, ?, ?, ?, ?, ?
+)
+
+""",
+(
+    "4351a99ac85ede2b15ef9e98bb0138e7da3b989f381f2e26641ff41d9d9f1066",
+    "(Standard disk drives)",
+    "EVM EXTE RNAL SSD 256 SCSI Disk Device",
+    "EVM EXTE RNAL SSD 256 SCSI Disk Device",
+    r"SCSI\DISK&VEN_EVM_EXTE&PROD_RNAL_SSD_256\6&530062A&1&000000",
     "Piyush"
 ))
 
 conn.commit()
-conn.close()
 
-print("Table created and hashed test USB inserted.")
+print("usb_devices table created successfully.\n")
+
+print("Contents of usb_devices:\n")
+
+cur.execute("SELECT * FROM usb_devices")
+
+for row in cur.fetchall():
+    print(row)
+
+conn.close()

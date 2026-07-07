@@ -23,10 +23,9 @@ class USBAuthenticator:
     def generate_device_hash(self, device):
 
         device_string = (
-            f"{device['vid']}|"
-            f"{device['pid']}|"
             f"{device['manufacturer']}|"
-            f"{device['serial_number']}"
+            f"{device['model']}|"
+            f"{device['pnp_device_id']}"
         )
 
         return hashlib.sha256(
@@ -51,7 +50,7 @@ class USBAuthenticator:
 
             FROM usb_devices
 
-            WHERE serial_number=?
+            WHERE device_id=?
 
         """,
 
@@ -119,12 +118,8 @@ if __name__ == "__main__":
             print("Device Name :", usb["device_name"])
 
             print("Manufacturer  :", usb["manufacturer"])
-
-            print("VID           :", usb["vid"])
-
-            print("PID           :", usb["pid"])
-
-            print("Serial Number :", usb["serial_number"])
+            print("Model         :", usb["model"])
+            print("PNP Device ID  :", usb["pnp_device_id"])
 
             print()
 
