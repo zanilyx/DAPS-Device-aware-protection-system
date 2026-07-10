@@ -1,186 +1,93 @@
+import logging
 import time
-import sqlite3
-from pathlib import Path
-from datetime import datetime
-
-import wmi
 
 from usb_auth import USBAuthenticator
-from usb_eject import USBEjector
+from usb_eject import eject_physical_drive, disable_by_pnp_id
+from usb_log import log_event
 
+# ===================================================
+# Config
+# ===================================================
 
-# ==========================================================
-# DATABASE
-# ==========================================================
+POLL_INTERVAL_SECONDS = 3
 
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
 
-LOGS_DB = ROOT_DIR / "database" / "logs.db"
 
+# ===================================================
+# Enforcement for a single unauthorized device
+# ===================================================
 
-# ==========================================================
-# AUDIT LOG
-# ==========================================================
+def enforce_device(usb: dict, device_hash: str):
+    name = usb["device_name"]
+    pnp_id = usb["pnp_device_id"]
+    usb_type = usb.get("media_type") or name
 
-def log_event(action, details=""):
+    logging.warning(f"Unauthorized device detected: {name} ({pnp_id})")
+    log_event(device_hash, usb_type, "DEVICE_DETECTED", "UNAUTHORIZED")
 
-    conn = sqlite3.connect(LOGS_DB)
+    ok = eject_physical_drive(usb["physical_drive"])
+    logging.info(f"  IOCTL eject {'succeeded' if ok else 'failed/vetoed'} for {name}")
+    log_event(device_hash, usb_type, "EJECT_ATTEMPT", "SUCCESS" if ok else "FAILED")
 
-    cur = conn.cursor()
+    disabled = disable_by_pnp_id(pnp_id)
+    if disabled:
+        logging.warning(f"  Device disabled: {name}")
+        log_event(device_hash, usb_type, "DEVICE_DISABLED", "SUCCESS")
+    else:
+        logging.error(f"  Device disable FAILED for {name} — device may still be accessible")
+        log_event(device_hash, usb_type, "DEVICE_DISABLED", "FAILED")
 
-    cur.execute("""
-        INSERT INTO audit_logs
-        (
-            timestamp,
-            username,
-            device_id,
-            file_id,
-            action,
-            details
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-    """,
-    (
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "SYSTEM",
-        "-",
-        "-",
-        action,
-        details
-    ))
 
-    conn.commit()
+# ===================================================
+# Main monitor loop
+# ===================================================
 
-    conn.close()
+def monitor():
+    auth = USBAuthenticator()
+    known_ids = set()
 
+    logging.info("USB monitor started. Watching for new devices...")
 
-# ==========================================================
-# USB MONITOR
-# ==========================================================
+    while True:
+        try:
+            results = auth.authenticate_all()
+            current_ids = set()
 
-class USBMonitor:
+            for item in results:
+                usb = item["device"]
+                dev_key = usb["pnp_device_id"]
+                current_ids.add(dev_key)
 
-    def __init__(self):
+                if dev_key in known_ids:
+                    continue  # already processed this device, skip
 
-        self.wmi = wmi.WMI()
+                device_hash = auth.generate_device_hash(usb)
+                usb_type = usb.get("media_type") or usb["device_name"]
 
-        self.auth = USBAuthenticator()
+                # newly seen device this cycle
+                if item["authorized"]:
+                    logging.info(f"Authorized device connected: {usb['device_name']} (owner: {item['owner']})")
+                    log_event(device_hash, usb_type, "DEVICE_DETECTED", "AUTHORIZED")
+                else:
+                    enforce_device(usb, device_hash)
 
-        self.ejector = USBEjector()
+            # forget devices that were unplugged, so they're re-checked if reconnected
+            known_ids = current_ids
 
-    # ------------------------------------------------------
+        except Exception as e:
+            logging.error(f"Monitor loop error: {e}")
+            log_event("", "", "MONITOR_ERROR", "FAILED")
 
-    def start(self):
+        time.sleep(POLL_INTERVAL_SECONDS)
 
-        print("\nUSB Monitor Started...\n")
-
-        watcher = self.wmi.watch_for(
-
-            notification_type="Creation",
-
-            wmi_class="Win32_USBControllerDevice"
-
-        )
-
-        while True:
-
-            try:
-
-                watcher()
-
-                print("\nUSB Device Inserted\n")
-
-                results = self.auth.authenticate_all()
-
-                if not results:
-
-                    continue
-
-                for item in results:
-
-                    usb = item["device"]
-
-                    serial = usb["serial_number"]
-
-                    log_event(
-
-                        "USB_INSERTED",
-
-                        serial
-
-                    )
-
-                    if item["authorized"]:
-
-                        print(
-
-                            "[AUTHORIZED]",
-
-                            usb["device_name"]
-
-                        )
-
-                        log_event(
-
-                            "USB_AUTHORIZED",
-
-                            serial
-
-                        )
-
-                    else:
-
-                        print(
-
-                            "[UNAUTHORIZED]",
-
-                            usb["device_name"]
-
-                        )
-
-                        log_event(
-
-                            "USB_BLOCKED",
-
-                            serial
-
-                        )
-
-                        self.ejector.eject(
-
-                            usb
-
-                        )
-
-            except KeyboardInterrupt:
-
-                print(
-
-                    "\nUSB Monitor Stopped."
-
-                )
-
-                break
-
-            except Exception as e:
-
-                print(
-
-                    "USB Monitor Error:",
-
-                    e
-
-                )
-
-                time.sleep(1)
-
-
-# ==========================================================
-# TEST
-# ==========================================================
 
 if __name__ == "__main__":
-
-    monitor = USBMonitor()
-
-    monitor.start()
+    try:
+        monitor()
+    except KeyboardInterrupt:
+        logging.info("USB monitor stopped by user.")
