@@ -2,28 +2,17 @@
 webapp.py
 
 Flask-based web dashboard for the network monitor.
-
-Run alongside (or instead of) the terminal dashboard:
-
-    from ui.webapp import start_web_dashboard
-    start_web_dashboard()
-
-Then open http://127.0.0.1:5000 in a browser.
 """
-from pathlib import Path
-import sys
+
 from flask import Flask, jsonify, render_template_string
 
-root_dir = Path(__file__).resolve().parent.parent
-if str(root_dir) not in sys.path:
-    sys.path.insert(0, str(root_dir))
 from core.flows import get_session, top_flows
 
 app = Flask(__name__)
 
 
 # -----------------------------------------------------
-# Human-readable bytes (same logic as terminal dashboard)
+# Human-readable bytes
 # -----------------------------------------------------
 
 def human(size):
@@ -44,8 +33,6 @@ def human(size):
 
 # -----------------------------------------------------
 # Group flows by remote IP + protocol
-# (same approach as the terminal dashboard, so both
-# views always agree with each other)
 # -----------------------------------------------------
 
 def grouped_flows(limit=100):
@@ -125,7 +112,6 @@ def api_flows():
     rows = grouped_flows(100)
 
     for row in rows:
-
         row["upload_human"] = human(row["upload"])
         row["download_human"] = human(row["download"])
 
@@ -143,6 +129,8 @@ PAGE = """
     <meta charset="utf-8">
     <title>Network Traffic Monitor</title>
     <style>
+        * { box-sizing: border-box; }
+
         body {
             background: #0d1117;
             color: #c9d1d9;
@@ -150,17 +138,21 @@ PAGE = """
             margin: 0;
             padding: 24px;
         }
+
         h1 {
             color: #58a6ff;
             font-size: 20px;
             letter-spacing: 1px;
+            margin-bottom: 20px;
         }
+
         .summary {
             display: flex;
             gap: 16px;
             flex-wrap: wrap;
             margin-bottom: 24px;
         }
+
         .card {
             background: #161b22;
             border: 1px solid #30363d;
@@ -168,16 +160,19 @@ PAGE = """
             padding: 12px 18px;
             min-width: 140px;
         }
+
         .card .label {
             font-size: 11px;
             color: #8b949e;
             text-transform: uppercase;
         }
+
         .card .value {
             font-size: 20px;
             color: #58a6ff;
             margin-top: 4px;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -186,25 +181,58 @@ PAGE = """
             border-radius: 8px;
             overflow: hidden;
         }
-        th, td {
-            padding: 8px 12px;
-            text-align: left;
-            border-bottom: 1px solid #21262d;
-            font-size: 13px;
-        }
+
         th {
             background: #0d1117;
             color: #8b949e;
             text-transform: uppercase;
             font-size: 11px;
+            padding: 10px 12px;
+            text-align: left;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
         }
+
+        th:hover {
+            color: #58a6ff;
+            background: #161b22;
+        }
+
+        th.sorted-asc,
+        th.sorted-desc {
+            color: #58a6ff;
+        }
+
+        th .arrow {
+            display: inline-block;
+            margin-left: 5px;
+            opacity: 0.4;
+            font-size: 10px;
+        }
+
+        th.sorted-asc .arrow::after  { content: "▲"; opacity: 1; }
+        th.sorted-desc .arrow::after { content: "▼"; opacity: 1; }
+        th:not(.sorted-asc):not(.sorted-desc) .arrow::after { content: "⇅"; }
+
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #21262d;
+            font-size: 13px;
+        }
+
         td.num {
             text-align: right;
             font-variant-numeric: tabular-nums;
         }
+
+        tr:hover td {
+            background: #1c2128;
+        }
+
         .status-BLACKLIST { color: #f85149; font-weight: bold; }
         .status-WHITELIST { color: #3fb950; font-weight: bold; }
-        .status-UNKNOWN { color: #d29922; font-weight: bold; }
+        .status-UNKNOWN   { color: #d29922; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -214,27 +242,39 @@ PAGE = """
 
     <table>
         <thead>
-            <tr>
-                <th>Status</th>
-                <th>Remote IP</th>
-                <th>Protocol</th>
-                <th class="num">Upload</th>
-                <th class="num">Download</th>
-                <th class="num">Packets</th>
+            <tr id="header-row">
+                <th data-col="status"    data-type="str">Status    <span class="arrow"></span></th>
+                <th data-col="remote"    data-type="str">Remote IP <span class="arrow"></span></th>
+                <th data-col="protocol"  data-type="str">Protocol  <span class="arrow"></span></th>
+                <th data-col="upload"    data-type="num" class="sorted-desc">Upload <span class="arrow"></span></th>
+                <th data-col="download"  data-type="num">Download  <span class="arrow"></span></th>
+                <th data-col="packets"   data-type="num">Packets   <span class="arrow"></span></th>
             </tr>
         </thead>
         <tbody id="flows"></tbody>
     </table>
 
     <script>
+        // -----------------------------------------------
+        // Sort state
+        // -----------------------------------------------
+        let sortCol = "upload";
+        let sortDir = "desc";   // "asc" or "desc"
+
+        // Latest data from the API, unsorted
+        let latestRows = [];
+
+        // -----------------------------------------------
+        // Summary cards
+        // -----------------------------------------------
         function buildSummary(s) {
             const cards = [
-                ["Runtime", s.runtime],
-                ["Total Upload", s.total_upload_human],
+                ["Runtime",        s.runtime],
+                ["Total Upload",   s.total_upload_human],
                 ["Total Download", s.total_download_human],
-                ["Packets", s.total_packets.toLocaleString()],
-                ["Flows", s.total_flows],
-                ["Unique IPs", s.unique_ips],
+                ["Packets",        s.total_packets.toLocaleString()],
+                ["Flows",          s.total_flows],
+                ["Unique IPs",     s.unique_ips],
             ];
 
             document.getElementById("summary").innerHTML = cards.map(
@@ -242,13 +282,51 @@ PAGE = """
                     <div class="card">
                         <div class="label">${label}</div>
                         <div class="value">${value}</div>
-                    </div>
-                `
+                    </div>`
             ).join("");
         }
 
+        // -----------------------------------------------
+        // Sort rows by current sortCol / sortDir
+        // -----------------------------------------------
+        function sortedRows(rows) {
+
+            const ths = document.querySelectorAll("th[data-col]");
+            let colType = "num";
+
+            ths.forEach(th => {
+                if (th.dataset.col === sortCol) {
+                    colType = th.dataset.type;
+                }
+            });
+
+            return [...rows].sort((a, b) => {
+
+                let va = a[sortCol];
+                let vb = b[sortCol];
+
+                if (colType === "num") {
+                    va = Number(va);
+                    vb = Number(vb);
+                } else {
+                    va = String(va).toLowerCase();
+                    vb = String(vb).toLowerCase();
+                }
+
+                if (va < vb) return sortDir === "asc" ? -1 : 1;
+                if (va > vb) return sortDir === "asc" ?  1 : -1;
+                return 0;
+            });
+        }
+
+        // -----------------------------------------------
+        // Render flows table
+        // -----------------------------------------------
         function buildFlows(rows) {
-            document.getElementById("flows").innerHTML = rows.map(r => `
+
+            const sorted = sortedRows(rows);
+
+            document.getElementById("flows").innerHTML = sorted.map(r => `
                 <tr>
                     <td class="status-${r.status}">${r.status}</td>
                     <td>${r.remote}</td>
@@ -258,8 +336,41 @@ PAGE = """
                     <td class="num">${r.packets}</td>
                 </tr>
             `).join("");
+
+            // Update header arrows
+            document.querySelectorAll("th[data-col]").forEach(th => {
+                th.classList.remove("sorted-asc", "sorted-desc");
+                if (th.dataset.col === sortCol) {
+                    th.classList.add(sortDir === "asc" ? "sorted-asc" : "sorted-desc");
+                }
+            });
         }
 
+        // -----------------------------------------------
+        // Column header click → sort
+        // -----------------------------------------------
+        document.querySelectorAll("th[data-col]").forEach(th => {
+
+            th.addEventListener("click", () => {
+
+                const col = th.dataset.col;
+
+                if (sortCol === col) {
+                    // Same column: flip direction
+                    sortDir = sortDir === "asc" ? "desc" : "asc";
+                } else {
+                    // New column: default to descending for numbers, ascending for strings
+                    sortCol = col;
+                    sortDir = th.dataset.type === "num" ? "desc" : "asc";
+                }
+
+                buildFlows(latestRows);
+            });
+        });
+
+        // -----------------------------------------------
+        // Refresh from API
+        // -----------------------------------------------
         async function refresh() {
             try {
                 const [summaryRes, flowsRes] = await Promise.all([
@@ -268,7 +379,10 @@ PAGE = """
                 ]);
 
                 buildSummary(await summaryRes.json());
-                buildFlows(await flowsRes.json());
+
+                latestRows = await flowsRes.json();
+                buildFlows(latestRows);
+
             } catch (e) {
                 console.error("Refresh failed:", e);
             }
@@ -292,11 +406,4 @@ def index():
 # -----------------------------------------------------
 
 def start_web_dashboard(host="0.0.0.0", port=5000):
-    """
-    Starts the Flask dev server. Blocks the calling thread,
-    same as the terminal dashboard's start_dashboard().
-    """
-
-    # use_reloader=False is important: the reloader spawns a
-    # second process, which would start a second packet capture.
     app.run(host=host, port=port, debug=False, use_reloader=False)
