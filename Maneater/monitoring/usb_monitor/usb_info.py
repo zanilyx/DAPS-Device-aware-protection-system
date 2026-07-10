@@ -18,21 +18,11 @@ class USBInfo:
 
         for disk in self.wmi.Win32_DiskDrive():
 
-            is_external = False
-
+    # Ignore internal drives
             if disk.MediaType:
 
-                if "External" in disk.MediaType:
-                    is_external = True
-
-            if disk.InterfaceType == "USB":
-                is_external = True
-
-            if disk.PNPDeviceID.startswith("USB"):
-                is_external = True
-
-            if not is_external:
-                continue
+                if "Fixed" in disk.MediaType:
+                    continue
 
             info = {}
 
@@ -40,63 +30,18 @@ class USBInfo:
 
             info["manufacturer"] = disk.Manufacturer
 
+            info["model"] = disk.Model
+
             info["physical_drive"] = disk.DeviceID
 
             info["pnp_device_id"] = disk.PNPDeviceID
 
-            info["serial_number"] = self.get_serial_number(
-                disk.PNPDeviceID
-            )
+            info["media_type"] = disk.MediaType
 
-            vid, pid = self.get_vid_pid(
-                disk.PNPDeviceID
-            )
-
-            info["vid"] = vid
-
-            info["pid"] = pid
 
             devices.append(info)
 
         return devices
-
-    # -----------------------------------------------------
-
-    def get_vid_pid(self, pnp_id):
-
-        vid = ""
-        pid = ""
-
-        vid_match = re.search(r"VID_([0-9A-F]{4})", pnp_id, re.I)
-
-        pid_match = re.search(r"PID_([0-9A-F]{4})", pnp_id, re.I)
-
-        if vid_match:
-            vid = vid_match.group(1)
-
-        if pid_match:
-            pid = pid_match.group(1)
-
-        return vid, pid
-
-    # -----------------------------------------------------
-
-    def get_serial_number(self, pnp_id):
-
-        try:
-
-            serial = pnp_id.split("\\")[-1]
-
-            if "&" in serial:
-
-                serial = serial.split("&")[0]
-
-            return serial
-
-        except Exception:
-
-            return ""
-
 
 
 # ---------------------------------------------------------
@@ -104,7 +49,7 @@ class USBInfo:
 # ---------------------------------------------------------
 
 if __name__ == "__main__":
-
+    import hashlib
     usb = USBInfo()
 
     devices = usb.get_connected_usb_devices()
@@ -124,15 +69,19 @@ if __name__ == "__main__":
             print("Device Name :", device["device_name"])
 
             print("Manufacturer  :", device["manufacturer"])
+            print("Model         :", device["model"])
 
-            print("VID           :", device["vid"])
-
-            print("PID           :", device["pid"])
-
-            print("Serial Number :", device["serial_number"])
-
-            print("Physical Drive :", device["physical_drive"])
 
             print("PNP Device ID  :", device["pnp_device_id"])
 
+            device_string = (
+                f"{device['manufacturer']}|"
+                f"{device['model']}|"
+                f"{device['pnp_device_id']}"
+            )
+
+            device_hash = hashlib.sha256(
+                device_string.encode()
+            ).hexdigest()
+            print("hashed value: ",device_hash)
             print()
