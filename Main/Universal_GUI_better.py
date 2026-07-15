@@ -26,11 +26,11 @@ from GUI_modules.Home_GUI import HomePage
 
 # ---------------- USB MONITOR (background) ----------------
 
-usb_monitor_dir = root_dir 
-if str(usb_monitor_dir) not in sys.path:
-    sys.path.insert(0, str(usb_monitor_dir))
+# usb_monitor_dir = root_dir / "Maneater" / "monitoring"
+# if str(usb_monitor_dir) not in sys.path:
+#     sys.path.insert(0, str(usb_monitor_dir))
 
-from Maneater.monitoring.usb_monitor import usb_monitor as run_usb_monitor
+from Maneater.monitoring.usb_monitor.usb_monitor import monitor as run_usb_monitor
 
 # ---------------- LOGIN PAGE ----------------
 

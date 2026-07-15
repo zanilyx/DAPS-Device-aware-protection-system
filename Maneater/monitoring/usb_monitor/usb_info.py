@@ -45,6 +45,58 @@ class USBInfo:
 
 
 # ---------------------------------------------------------
+# MTP / Portable devices (Android, iPhone, etc.) are not listed in Win32_DiskDrive.
+# ---------------------------------------------------------
+
+    def get_connected_mtp_devices(self):
+
+        devices = []
+
+        for dev in self.wmi.Win32_PnPEntity():
+
+            if not dev.PNPDeviceID:
+                continue
+
+            if not dev.PNPDeviceID.startswith("USB\\"):
+                continue
+
+            # Skip USB hubs
+            if "ROOT_HUB" in dev.PNPDeviceID:
+                continue
+
+            # Skip USB composite devices
+            if dev.Name and "Composite" in dev.Name:
+                continue
+
+            # Skip webcams
+            if dev.Name and "WebCam" in dev.Name:
+                continue
+
+            info = {}
+
+            info["device_name"] = dev.Name
+            info["manufacturer"] = dev.Manufacturer
+            info["model"] = dev.Name
+            info["physical_drive"] = None
+            info["pnp_device_id"] = dev.PNPDeviceID
+            info["media_type"] = "USB"
+
+            devices.append(info)
+
+        return devices
+# ---------------------------------------------------------
+# All connected USB devices (storage + MTP/portable)
+# ---------------------------------------------------------
+
+    def get_all_usb_devices(self):
+
+        devices = []
+
+        devices.extend(self.get_connected_usb_devices())   # Storage devices
+   # Phones
+
+        return devices
+# ---------------------------------------------------------
 # TEST
 # ---------------------------------------------------------
 

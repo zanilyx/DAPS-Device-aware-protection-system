@@ -99,6 +99,7 @@ def get_devinst_from_pnp_id(pnp_device_id: str):
 
 def disable_devnode(devinst: int) -> bool:
     result = cfgmgr32.CM_Disable_DevNode(devinst, CM_DISABLE_UI_NOT_OK)
+    print("CM_Disable_DevNode returned:", hex(result))
     return result == CR_SUCCESS
 
 
@@ -140,20 +141,37 @@ def enforce():
             print(f"[OK] {usb['device_name']} ({item['owner']}) authorized.")
             continue
 
-        print(f"[MISMATCH] {usb['device_name']} ({usb['pnp_device_id']}) unauthorized. Ejecting...")
+        print(f"[MISMATCH] {usb['device_name']} ({usb['pnp_device_id']}) unauthorized.")
 
-        ok = eject_physical_drive(usb["physical_drive"])
-        if ok:
-            print("  IOCTL eject reported success.")
+        # Storage devices (USB, HDD, SSD, Pendrive)
+        if usb.get("physical_drive"):
+            print("  Attempting safe eject...")
+
+            ok = eject_physical_drive(usb["physical_drive"])
+
+            if ok:
+                print("  IOCTL eject reported success.")
+            else:
+                print("  IOCTL eject failed/vetoed.")
+
+        # Phones (MTP), cameras, or devices without a physical drive
         else:
-            print("  IOCTL eject failed/vetoed.")
+            print("  No physical drive detected (MTP/Portable device). Skipping eject.")
 
-        # Many bridge chips (like this one) ack the IOCTL without doing
-        # anything physically. Disable the devnode as a hard fallback
-        # so the device is actually unusable regardless of driver support.
+        # Disable the device as the final enforcement step
         print("  Disabling device node as enforcement fallback...")
+
+        print("Device Name:", usb["device_name"])
+        print("PNP ID:", usb["pnp_device_id"])
+
         disabled = disable_by_pnp_id(usb["pnp_device_id"])
-        print("  Device disabled." if disabled else "  Device disable failed/vetoed.")
+
+        print("Disabled:", disabled)
+
+        if disabled:
+            print("  Device disabled.")
+        else:
+            print("  Device disable failed/vetoed.")
 
 
 if __name__ == "__main__":

@@ -72,7 +72,7 @@ class USBAuthenticator:
 
     def authenticate_all(self):
 
-        devices = self.usb.get_connected_usb_devices()
+        devices = self.usb.get_all_usb_devices()
 
         results = []
 
