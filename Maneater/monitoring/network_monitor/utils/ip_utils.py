@@ -26,25 +26,24 @@ def refresh_local_ips():
                 LOCAL_IPS_V4.add(addr.address)
 
             elif addr.family == socket.AF_INET6:
-
-                LOCAL_IPS_V6.add(
-                    addr.address.split("%")[0]
-                )
+                # Strip scope ID (e.g. %eth0) and normalise
+                ip = addr.address.split("%")[0].lower()
+                LOCAL_IPS_V6.add(ip)
 
 
 refresh_local_ips()
 
 
 def is_local(ip):
-
-    return ip in LOCAL_IPS_V4 or ip in LOCAL_IPS_V6
+    # Normalise IPv6 for comparison
+    return ip in LOCAL_IPS_V4 or ip.lower() in LOCAL_IPS_V6
 
 
 def is_loopback(ip):
-
     return (
         ip.startswith("127.")
         or ip == "::1"
+        or ip.lower() == "::1"
     )
 
 
@@ -52,7 +51,5 @@ def resolve_hostname(ip):
 
     try:
         return socket.gethostbyaddr(ip)[0]
-
     except Exception:
-
         return ""
