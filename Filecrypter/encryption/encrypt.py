@@ -5,7 +5,7 @@ import json
 import shutil
 import sqlite3
 import base64
-from GUI_modules.progress_dialog import ProgressDialog
+
 import time
 from pathlib import Path
 
@@ -20,7 +20,7 @@ from Crypto.Cipher import AES
 from .key import build_metadata, generate_key
 from .decrypt import log_event
 from GUI_modules.role_dialog import RoleSelectionDialog
-
+from GUI_modules.progess_dialog import ProgressDialog
 
 # ==========================================================
 # DATABASE PATHS

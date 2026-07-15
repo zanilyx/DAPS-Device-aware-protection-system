@@ -16,12 +16,21 @@ from PySide6.QtGui import (
 )
 from PySide6.QtCore import Qt
 import sys
+import threading
 from pathlib import Path
 root_dir = Path(__file__).resolve().parent.parent
 if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 from GUI_modules.Login_page_GUI import LoginPage
 from GUI_modules.Home_GUI import HomePage
+
+# ---------------- USB MONITOR (background) ----------------
+
+usb_monitor_dir = root_dir 
+if str(usb_monitor_dir) not in sys.path:
+    sys.path.insert(0, str(usb_monitor_dir))
+
+from Maneater.monitoring.usb_monitor import usb_monitor as run_usb_monitor
 
 # ---------------- LOGIN PAGE ----------------
 
@@ -259,6 +268,20 @@ class MainApp(QMainWindow):
         self.login_page.login_success.connect(
             self.login_complete
         )
+
+        # ---------------- USB MONITOR (background) ----------------
+        # Runs silently: no UI, all activity logged to logs.db via db_logger.
+        self._usb_stop_event = threading.Event()
+        self._usb_thread = threading.Thread(
+            target=run_usb_monitor,
+            args=(self._usb_stop_event,),
+            daemon=True
+        )
+        self._usb_thread.start()
+
+    def closeEvent(self, event):
+        self._usb_stop_event.set()
+        event.accept()
 
     def login_complete(self, user_data):
 

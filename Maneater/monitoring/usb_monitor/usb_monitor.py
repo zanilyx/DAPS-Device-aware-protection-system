@@ -1,9 +1,17 @@
 import logging
 import time
+import sys
+from pathlib import Path
 
 from usb_auth import USBAuthenticator
 from usb_eject import eject_physical_drive, disable_by_pnp_id
 from usb_log import log_event
+
+alerts_dir = Path(__file__).resolve().parent.parent.parent 
+if str(alerts_dir) not in sys.path:
+    sys.path.insert(0, str(alerts_dir))
+
+from alerts.alert_manager import raise_alert, Severity
 
 # ===================================================
 # Config
@@ -29,6 +37,12 @@ def enforce_device(usb: dict, device_hash: str):
 
     logging.warning(f"Unauthorized device detected: {name} ({pnp_id})")
     log_event(device_hash, usb_type, "DEVICE_DETECTED", "UNAUTHORIZED")
+    raise_alert(
+        source="USB",
+        severity=Severity.WARNING,
+        title="Unknown USB device connected",
+        message=f"{name} ({pnp_id}) is not authorized. Attempting removal..."
+    )
 
     ok = eject_physical_drive(usb["physical_drive"])
     logging.info(f"  IOCTL eject {'succeeded' if ok else 'failed/vetoed'} for {name}")
@@ -38,22 +52,34 @@ def enforce_device(usb: dict, device_hash: str):
     if disabled:
         logging.warning(f"  Device disabled: {name}")
         log_event(device_hash, usb_type, "DEVICE_DISABLED", "SUCCESS")
+        raise_alert(
+            source="USB",
+            severity=Severity.INFO,
+            title="Unauthorized USB device blocked",
+            message=f"{name} was successfully disabled."
+        )
     else:
         logging.error(f"  Device disable FAILED for {name} — device may still be accessible")
         log_event(device_hash, usb_type, "DEVICE_DISABLED", "FAILED")
+        raise_alert(
+            source="USB",
+            severity=Severity.CRITICAL,
+            title="Failed to block unauthorized USB device",
+            message=f"{name} could not be disabled and may still be accessible!"
+        )
 
 
 # ===================================================
 # Main monitor loop
 # ===================================================
 
-def monitor():
+def monitor(stop_event=None):
     auth = USBAuthenticator()
     known_ids = set()
 
     logging.info("USB monitor started. Watching for new devices...")
 
-    while True:
+    while stop_event is None or not stop_event.is_set():
         try:
             results = auth.authenticate_all()
             current_ids = set()
@@ -82,6 +108,12 @@ def monitor():
         except Exception as e:
             logging.error(f"Monitor loop error: {e}")
             log_event("", "", "MONITOR_ERROR", "FAILED")
+            raise_alert(
+                source="USB",
+                severity=Severity.CRITICAL,
+                title="USB monitor error",
+                message=str(e)
+            )
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
