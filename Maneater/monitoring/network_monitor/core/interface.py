@@ -1,92 +1,74 @@
+"""
+interface.py
+
+Returns the Scapy/Npcap interface name (full NPF GUID on Windows)
+for the adapter that carries the default route.
+
+On Windows, Scapy needs the full GUID like:
+    \\Device\\NPF_{7FCBC1AB-F312-43EB-B8D4-E40E936757D8}
+NOT the friendly name like "Wi-Fi" -- using the friendly name
+causes Scapy to silently capture on the wrong adapter or miss
+most packets.
+"""
+
 import socket
 
 from scapy.all import IFACES
-from utils.ip_utils import LOCAL_IPS_V4
 
 
 def get_default_route_ip():
     """
-    Find the local IP address actually used to reach the internet,
-    i.e. the IP bound to whatever interface holds the default route.
-
-    This doesn't send any real traffic -- UDP sockets don't connect
-    until you send data, this just asks the OS to pick the route.
+    Ask the OS which local IP it would use to reach the internet.
+    No packets are actually sent.
     """
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     try:
         s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-
+        return s.getsockname()[0]
     except Exception:
-        ip = None
-
+        return None
     finally:
         s.close()
-
-    return ip
 
 
 def get_capture_interface():
 
     default_ip = get_default_route_ip()
 
-    # ---------------------------------------------
-    # Preferred: match the interface that owns the
-    # IP used for the default route. This avoids
-    # accidentally picking a VPN/virtual/secondary
-    # adapter that only sees stray broadcast traffic.
-    # ---------------------------------------------
+    # -------------------------------------------------------
+    # Primary: match the Scapy interface whose IP matches the
+    # default route IP. This returns the full NPF GUID which
+    # Scapy/Npcap needs on Windows.
+    # -------------------------------------------------------
 
     if default_ip:
 
-        for iface in IFACES.values():
+        for name, iface in IFACES.items():
 
             ip = getattr(iface, "ip", None)
 
             if ip == default_ip:
 
-                print(f"\nUsing interface (default route): {iface.name}")
+                print(f"\nUsing interface: {name}")
                 print(f"IP: {ip}\n")
 
-                return iface.name
+                return name  # full NPF GUID e.g. \Device\NPF_{...}
 
-        print(
-            f"\nWarning: default route IP {default_ip} did not match "
-            f"any Scapy interface. Falling back to IP-list match.\n"
-        )
+    # -------------------------------------------------------
+    # Fallback: any non-loopback interface with a real IP
+    # -------------------------------------------------------
 
-    # ---------------------------------------------
-    # Fallback: any interface whose IP we know about
-    # (original behavior, kept as a backup)
-    # ---------------------------------------------
-
-    for iface in IFACES.values():
+    for name, iface in IFACES.items():
 
         ip = getattr(iface, "ip", None)
 
-        if ip and ip in LOCAL_IPS_V4:
+        if ip and not ip.startswith("127.") and not ip.startswith("169.254."):
 
-            print(f"\nUsing interface (IP list match): {iface.name}")
+            print(f"\nFallback interface: {name}")
             print(f"IP: {ip}\n")
 
-            return iface.name
+            return name
 
-    # ---------------------------------------------
-    # Last resort: first non-loopback interface with
-    # an IP at all
-    # ---------------------------------------------
-
-    for iface in IFACES.values():
-
-        ip = getattr(iface, "ip", None)
-
-        if ip and ip != "127.0.0.1":
-
-            print(f"\nFallback interface: {iface.name}")
-            print(f"IP: {ip}\n")
-
-            return iface.name
-
-    raise RuntimeError("No suitable interface found.")
+    raise RuntimeError("No suitable network interface found.")
