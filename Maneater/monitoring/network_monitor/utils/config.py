@@ -50,7 +50,12 @@ DEFAULT_SETTINGS = {
 
     "upload_alert_mb": 50,
 
-    "dashboard_sort": "upload"
+    "dashboard_sort": "upload",
+
+    # Daily traffic thresholds (in MB). Set to 0 to disable.
+    "daily_upload_limit_mb": 0,
+
+    "daily_download_limit_mb": 0
 
 }
 
