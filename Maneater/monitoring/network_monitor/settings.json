@@ -5,5 +5,7 @@
     "track_ipv6": true,
     "ignore_loopback": true,
     "upload_alert_mb": 50,
-    "dashboard_sort": "upload"
+    "dashboard_sort": "upload",
+    "daily_upload_limit_mb": 50,
+    "daily_download_limit_mb": 200
 }

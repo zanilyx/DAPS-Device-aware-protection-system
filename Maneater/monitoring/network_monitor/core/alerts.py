@@ -70,14 +70,12 @@ def _maybe_reset_day():
 
 
 def _fire(alert_type, message):
-    """Add an alert if it hasn't already fired."""
+    """Add an alert if it hasn't already fired today."""
 
-    key = (alert_type, message)
-
-    if key in _fired:
+    if alert_type in _fired:
         return
 
-    _fired.add(key)
+    _fired.add(alert_type)
 
     _alerts.append({
         "type": alert_type,
