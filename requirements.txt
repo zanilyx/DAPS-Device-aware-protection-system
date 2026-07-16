@@ -5,19 +5,19 @@
 
 # GUI Framework
 # Modern Qt6 bindings for creating cross-platform GUI applications
-PySide6==6.7.2
+PySide6==6.9.1
 
 # Cryptography
 # Core cryptography library for AES encryption/decryption
-pycryptodome==3.20.0
+pycryptodome==3.23.0
 
 # HTTP Client
 # Making HTTP requests to external APIs (ISS position data)
-requests==2.31.0
+requests==2.31.5
 
 # Astronomical Data
 # Ephemeris calculations for planetary and ISS position data
-skyfield==1.46
+skyfield==1.54
 
 # ============================================================
 # Development & Optional Dependencies
