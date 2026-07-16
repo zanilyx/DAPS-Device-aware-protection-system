@@ -8,6 +8,7 @@ Now with authentication for admins and managers only.
 from flask import Flask, jsonify, render_template_string, request, session, redirect
 from pathlib import Path
 import sys
+import os
 from functools import wraps
 from datetime import timedelta
 
@@ -27,7 +28,8 @@ from utils.config import SETTINGS
 from database.users import authenticate, get_user
 
 app = Flask(__name__)
-app.secret_key = "network-monitor-secret-key"  # Change this to a secure random key
+# Use a more secure secret key
+app.secret_key = os.environ.get('SECRET_KEY', 'network-monitor-secure-key-2024')
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using HTTPS
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
@@ -54,7 +56,7 @@ def admin_or_manager_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'username' not in session:
-            return redirect('/login')
+            return jsonify({"error": "Unauthorized"}), 401
         
         user = get_user(session['username'])
         if not user or user['role'] not in ('admin', 'manager'):
@@ -82,18 +84,22 @@ def login():
     if not username or not password:
         return render_template_string(LOGIN_PAGE, error="Username and password required"), 400
     
+    print(f"[LOGIN] Attempting login for: {username}")
     is_auth, role = authenticate(username, password)
+    print(f"[LOGIN] Auth result: is_auth={is_auth}, role={role}")
     
     if is_auth and role in ('admin', 'manager'):
         session.permanent = True
         session['username'] = username
         session['role'] = role
+        print(f"[LOGIN] Login successful for {username}")
         return redirect('/')
     
+    print(f"[LOGIN] Login failed for {username}")
     return render_template_string(LOGIN_PAGE, error="Invalid credentials or insufficient permissions"), 401
 
 
-@app.route('/logout', methods=['POST'])
+@app.route('/logout', methods=['GET', 'POST'])
 def logout():
     """Logout handler."""
     session.clear()
@@ -643,9 +649,7 @@ PAGE = """
     <div class="navbar">
         <h1>NETWORK TRAFFIC MONITOR</h1>
         <div class="navbar-right">
-            <div class="user-info">
-                <span id="user-display"></span>
-            </div>
+            <div class="user-info" id="user-display"></div>
             <form method="POST" action="/logout" style="margin: 0;">
                 <button type="submit" class="btn-logout">Logout</button>
             </form>
@@ -685,14 +689,6 @@ PAGE = """
     </table>
 
     <script>
-        // ---- Display username ----
-        function displayUser() {
-            const userElement = document.getElementById("user-display");
-            const username = localStorage.getItem("username") || "User";
-            const role = localStorage.getItem("role") || "unknown";
-            userElement.textContent = `${username} (${role})`;
-        }
-
         // ---- Sort state ----
         let sortCol = "upload";
         let sortDir = "desc";
@@ -887,7 +883,6 @@ PAGE = """
             }
         }
 
-        displayUser();
         refresh();
         setInterval(refresh, 1000);
     </script>
@@ -907,4 +902,5 @@ def index():
 # =====================================================
 
 def start_web_dashboard(host="0.0.0.0", port=5000):
+    print(f"[Network Monitor] Starting web dashboard on {host}:{port}")
     app.run(host=host, port=port, debug=False, use_reloader=False)
