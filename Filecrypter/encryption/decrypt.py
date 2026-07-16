@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-import uuid
+import winreg
 import socket
 import sqlite3
 import base64
@@ -73,7 +73,23 @@ def get_aes_key(file_id):
 
 def get_device_id():
 
-    return str(uuid.getnode())
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography"
+        )
+
+        machine_guid = winreg.QueryValueEx(
+            key,
+            "MachineGuid"
+        )[0]
+
+        winreg.CloseKey(key)
+
+        return str(machine_guid)
+
+    except Exception:
+        return None
 
 
 def get_hostname():
@@ -152,7 +168,10 @@ def get_user_role(username):
 
 def verify_device(username):
 
-    current_device = str(uuid.getnode())
+    current_device = get_device_id()
+
+    if current_device is None:
+        return False
 
     conn = sqlite3.connect(DEVICES_DB)
     cur = conn.cursor()
