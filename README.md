@@ -366,18 +366,6 @@ for row in cursor.fetchall():
 - [ ] Advanced encryption with key escrow
 - [ ] Biometric authentication support
 
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see LICENSE file for details.
 
 ## ⚠️ Security Notice
 
@@ -389,20 +377,8 @@ This system handles sensitive organizational data. Please:
 - Monitor audit logs for suspicious activity
 - Run on secure, isolated networks when possible
 
-## 📧 Support
-
-For issues, questions, or suggestions:
-- Open an issue on GitHub
-- Contact the development team
-- Check existing documentation and FAQs
-
-## 👨‍💻 Development Team
-
-- **Original Developer**: zanilyx
-- **Repository**: https://github.com/zanilyx/DAPS-Device-aware-protection-system
-
 ---
 
 **Version**: 1.0.0  
-**Last Updated**: 2024  
+**Last Updated**: 2026  
 **Status**: Active Development
