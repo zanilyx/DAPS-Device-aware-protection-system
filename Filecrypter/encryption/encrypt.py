@@ -118,6 +118,14 @@ def move_to_company_database(file_path):
         os.path.basename(file_path)
     )
 
+    # If the file is already sitting at the destination (e.g. the user
+    # picked an already-encrypted .tvk file that lives in Company DB),
+    # source and destination are the same path. Removing "destination"
+    # in that case deletes the very file we're about to move, so just
+    # treat it as already in place instead of moving it onto itself.
+    if os.path.abspath(file_path) == os.path.abspath(destination):
+        return destination
+
     if os.path.exists(destination):
         os.remove(destination)
 
@@ -314,15 +322,62 @@ def encrypt_file(username, file_path=None):
 
         )
 
-        QMessageBox.information(
+        # ---------------------------------------
+        # Remove original plaintext file from device
+        # ---------------------------------------
+        # The encrypted .tvk is now safely stored in Company DB and
+        # registered in the database. The confidential original must
+        # not remain on the local device — only the .tvk should exist.
+        # This runs last, after encryption/move/metadata/log all
+        # succeeded, so a failure earlier never leaves you without
+        # your original file.
 
-            None,
+        original_removed = True
 
-            "Encryption Successful",
+        same_path = os.path.abspath(file_path) == os.path.abspath(encrypted_file)
 
-            f"Encrypted file stored in:\n\n{encrypted_file}"
+        try:
+            if not same_path and os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
 
-        )
+            original_removed = False
+
+            print("Warning: could not remove original file:", e)
+
+            log_event(
+                username=username,
+                file_id=file_id,
+                action="ORIGINAL_DELETE_FAILED",
+                details=str(e)
+            )
+
+        if original_removed:
+
+            QMessageBox.information(
+
+                None,
+
+                "Encryption Successful",
+
+                f"Encrypted file stored in:\n\n{encrypted_file}\n\n"
+                f"Original file has been removed from this device."
+
+            )
+
+        else:
+
+            QMessageBox.warning(
+
+                None,
+
+                "Encryption Successful — Cleanup Warning",
+
+                f"Encrypted file stored in:\n\n{encrypted_file}\n\n"
+                f"Could not remove the original file from this device. "
+                f"Please delete it manually:\n\n{file_path}"
+
+            )
 
         return encrypted_file
 
