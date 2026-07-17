@@ -1,9 +1,0 @@
-cryptography
-watchdog
-psutil
-pywin32
-bcrypt
-pyotp
-pandas
-reportlab
-sqlite3

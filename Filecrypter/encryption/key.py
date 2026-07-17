@@ -3,17 +3,6 @@ import requests
 from datetime import datetime
 from skyfield.api import load
 import json
-import time
-
-
-def show_progress(stage, steps=20, delay=0.05):
-    print(f"\n{stage}")
-    for i in range(steps + 1):
-        percent = int((i / steps) * 100)
-        bar = "#" * i + "-" * (steps - i)
-        print(f"\r[{bar}] {percent}%", end="", flush=True)
-        time.sleep(delay)
-    print()
 
 
 # ==========================================================
@@ -22,17 +11,14 @@ def show_progress(stage, steps=20, delay=0.05):
 
 def get_iss_position():
     try:
-        show_progress("Waiting for ISS API data...")
-
         response = requests.get(
             "http://api.open-notify.org/iss-now.json",
-            timeout=10
+            timeout=3
         )
 
         data = response.json()
         lat = float(data["iss_position"]["latitude"])
         lon = float(data["iss_position"]["longitude"])
-        print(f"ISS Position: Lat {lat}, Lon {lon}")
         return lat, lon
 
     except Exception as e:
@@ -40,39 +26,33 @@ def get_iss_position():
         return 0.0, 0.0
 
 
-def get_mercury_position():
+# ==========================================================
+# PLANET POSITIONS
+# (loads the ephemeris file once and reuses it for both
+# Mercury and Pluto, instead of loading it twice)
+# ==========================================================
+
+def get_planet_positions():
     planets = load("de421.bsp")
     earth = planets["earth"]
-    mercury = planets["mercury"]
 
     ts = load.timescale()
     t = ts.now()
 
-    position = earth.at(t).observe(mercury).position.km
-    return tuple(position)
+    mercury_position = earth.at(t).observe(planets["mercury"]).position.km
+    pluto_position = earth.at(t).observe(planets["PLUTO BARYCENTER"]).position.km
 
-
-def get_pluto_position():
-    planets = load("de421.bsp")
-    earth = planets["earth"]
-    pluto = planets["PLUTO BARYCENTER"]
-
-    ts = load.timescale()
-    t = ts.now()
-
-    position = earth.at(t).observe(pluto).position.km
-    return tuple(position)
+    return tuple(mercury_position), tuple(pluto_position)
 
 
 def build_metadata():
     iss_lat, iss_lon = get_iss_position()
 
-    show_progress("Processing astronomical data...")
-    
-    mercury_x, mercury_y, mercury_z = get_mercury_position()
-    pluto_x, pluto_y, pluto_z = get_pluto_position()
-    print(f"Mercury Position (km): X {mercury_x}, Y {mercury_y}, Z {mercury_z}")
-    print(f"Pluto Position (km): X {pluto_x}, Y {pluto_y}, Z {pluto_z}")
+    mercury_x, mercury_y, mercury_z = None, None, None
+    pluto_x, pluto_y, pluto_z = None, None, None
+
+    (mercury_x, mercury_y, mercury_z), (pluto_x, pluto_y, pluto_z) = get_planet_positions()
+
     utc = datetime.utcnow().isoformat()
 
     return {
@@ -105,8 +85,6 @@ def generate_key(metadata):
         + metadata["utc"]
     )
 
-    show_progress("Generating AES-256 key...")
-    
     aes256_key = hashlib.sha256(
         material.encode()
     ).digest()  # full 32-byte SHA256 digest

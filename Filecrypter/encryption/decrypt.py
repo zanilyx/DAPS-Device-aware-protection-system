@@ -267,7 +267,7 @@ def decrypt_file(username, file_path=None):
             None,
             "Select Encrypted File",
             "",
-            "TVK Files (*.tvk)"
+            "DAPS Files (*.daps)"
         )
 
         if not file_path:
@@ -439,12 +439,6 @@ def decrypt_file(username, file_path=None):
             file_id,
             "DECRYPT_SUCCESS",
             f"Role={user_role}"
-        )
-
-        QMessageBox.information(
-            None,
-            "Success",
-            f"File decrypted successfully.\n\n{output_path}"
         )
 
         return output_path

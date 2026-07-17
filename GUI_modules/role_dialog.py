@@ -51,6 +51,8 @@ class RoleSelectionDialog(QDialog):
 
         self.confidential_btn.setChecked(True)
 
+        self.public_btn.toggled.connect(self._on_public_toggled)
+
         class_layout.addWidget(self.public_btn)
         class_layout.addWidget(self.internal_btn)
         class_layout.addWidget(self.confidential_btn)
@@ -112,6 +114,14 @@ class RoleSelectionDialog(QDialog):
         layout.addLayout(button_layout)
 
         self.setLayout(layout)
+
+    def _on_public_toggled(self, checked):
+        if not checked:
+            return
+
+        for role, cb in self.roles.items():
+            if cb.isEnabled():
+                cb.setChecked(True)
 
     def accept_data(self):
 

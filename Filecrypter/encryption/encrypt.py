@@ -5,8 +5,6 @@ import json
 import shutil
 import sqlite3
 import base64
-
-import time
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -20,7 +18,6 @@ from Crypto.Cipher import AES
 from .key import build_metadata, generate_key
 from .decrypt import log_event
 from GUI_modules.role_dialog import RoleSelectionDialog
-from GUI_modules.progess_dialog import ProgressDialog
 
 # ==========================================================
 # DATABASE PATHS
@@ -266,7 +263,7 @@ def encrypt_file(username, file_path=None):
 
         encrypted_file = (
             os.path.splitext(file_path)[0]
-            + ".tvk"
+            + ".daps"
         )
 
         with open(encrypted_file, "wb") as f:
@@ -350,33 +347,6 @@ def encrypt_file(username, file_path=None):
                 file_id=file_id,
                 action="ORIGINAL_DELETE_FAILED",
                 details=str(e)
-            )
-
-        if original_removed:
-
-            QMessageBox.information(
-
-                None,
-
-                "Encryption Successful",
-
-                f"Encrypted file stored in:\n\n{encrypted_file}\n\n"
-                f"Original file has been removed from this device."
-
-            )
-
-        else:
-
-            QMessageBox.warning(
-
-                None,
-
-                "Encryption Successful — Cleanup Warning",
-
-                f"Encrypted file stored in:\n\n{encrypted_file}\n\n"
-                f"Could not remove the original file from this device. "
-                f"Please delete it manually:\n\n{file_path}"
-
             )
 
         return encrypted_file

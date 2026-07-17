@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
@@ -59,16 +59,139 @@ class Login_Page(QMainWindow):
 
 # ---------------- MONITOR PAGE ----------------
 
+import psutil
+
+MON_BG_SURFACE = "#1C2E42"
+MON_BORDER = "#2A4059"
+MON_TEXT_PRI = "#F0F4F8"
+MON_TEXT_SEC = "#8FA8BF"
+MON_ACCENT = "#4A9EBF"
+
+
+def _format_speed(bytes_per_sec: float) -> str:
+    if bytes_per_sec >= 1024 * 1024:
+        return f"{bytes_per_sec / (1024 * 1024):.2f} MB/s"
+    return f"{bytes_per_sec / 1024:.1f} KB/s"
+
+
+class StatCard(QWidget):
+
+    def __init__(self, title: str):
+        super().__init__()
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {MON_BG_SURFACE};
+                border: 1px solid {MON_BORDER};
+                border-radius: 10px;
+            }}
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(6)
+
+        title_label = QLabel(title.upper())
+        title_label.setStyleSheet(f"""
+            color: {MON_TEXT_SEC}; font-size: 10px; font-weight: 600;
+            letter-spacing: 1px; background: transparent; border: none;
+        """)
+
+        self.value_label = QLabel("—")
+        self.value_label.setStyleSheet(f"""
+            color: {MON_TEXT_PRI}; font-size: 22px; font-weight: 700;
+            background: transparent; border: none;
+        """)
+
+        layout.addWidget(title_label)
+        layout.addWidget(self.value_label)
+
+    def set_value(self, text: str):
+        self.value_label.setText(text)
+
+
 class MonitorPage(QWidget):
 
     def __init__(self):
         super().__init__()
 
-        layout = QVBoxLayout(self)
+        self.setStyleSheet("background: transparent;")
 
-        layout.addWidget(
-            QLabel("Monitor Page")
-        )
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(40, 32, 40, 40)
+        outer.setSpacing(20)
+
+        heading = QLabel("System & Network Monitor")
+        heading.setStyleSheet(f"""
+            color: {MON_TEXT_PRI}; font-size: 22px; font-weight: 700;
+            background: transparent; border: none;
+        """)
+        outer.addWidget(heading)
+
+        # ── network row ──
+        net_row = QHBoxLayout()
+        net_row.setSpacing(16)
+
+        self.download_card = StatCard("Download Speed")
+        self.upload_card = StatCard("Upload Speed")
+
+        net_row.addWidget(self.download_card)
+        net_row.addWidget(self.upload_card)
+
+        outer.addLayout(net_row)
+
+        # ── system resource row ──
+        sys_row = QHBoxLayout()
+        sys_row.setSpacing(16)
+
+        self.cpu_card = StatCard("CPU Usage")
+        self.ram_card = StatCard("RAM Usage")
+        self.disk_card = StatCard("Disk Usage")
+
+        sys_row.addWidget(self.cpu_card)
+        sys_row.addWidget(self.ram_card)
+        sys_row.addWidget(self.disk_card)
+
+        outer.addLayout(sys_row)
+
+        outer.addStretch()
+
+        # baseline counters for speed calculation
+        counters = psutil.net_io_counters()
+        self._last_bytes_sent = counters.bytes_sent
+        self._last_bytes_recv = counters.bytes_recv
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._refresh)
+        self._timer.start(1000)  # poll every second
+
+    def _refresh(self):
+        # network speed (delta over ~1s interval)
+        counters = psutil.net_io_counters()
+
+        sent_delta = counters.bytes_sent - self._last_bytes_sent
+        recv_delta = counters.bytes_recv - self._last_bytes_recv
+
+        self._last_bytes_sent = counters.bytes_sent
+        self._last_bytes_recv = counters.bytes_recv
+
+        self.upload_card.set_value(_format_speed(sent_delta))
+        self.download_card.set_value(_format_speed(recv_delta))
+
+        # system resource usage
+        cpu_percent = psutil.cpu_percent(interval=None)
+        ram_percent = psutil.virtual_memory().percent
+        disk_percent = psutil.disk_usage(Path.home().anchor).percent
+
+        self.cpu_card.set_value(f"{cpu_percent:.0f}%")
+        self.ram_card.set_value(f"{ram_percent:.0f}%")
+        self.disk_card.set_value(f"{disk_percent:.0f}%")
+
+    def showEvent(self, event):
+        # reset psutil's internal cpu_percent sampling window each time the
+        # page becomes visible so the first reading after switching tabs
+        # isn't stale
+        psutil.cpu_percent(interval=None)
+        super().showEvent(event)
 
 # ---------------- Avatar ----------------
 
@@ -142,6 +265,7 @@ class Avatar(QWidget):
 class Header(QWidget):
 
     page_requested = Signal(str)
+    logout_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -157,6 +281,7 @@ class Header(QWidget):
 
         btn_home = QPushButton("Home")
         btn_monitor = QPushButton("Monitor")
+        btn_logout = QPushButton("Logout")
 
         btn_home.clicked.connect(
             lambda: self.page_requested.emit("home")
@@ -166,6 +291,10 @@ class Header(QWidget):
             lambda: self.page_requested.emit("monitor")
         )
 
+        btn_logout.clicked.connect(
+            lambda: self.logout_requested.emit()
+        )
+
         layout.addWidget(self.avatar)
         layout.addWidget(self.username_label)
 
@@ -173,6 +302,7 @@ class Header(QWidget):
 
         layout.addWidget(btn_home)
         layout.addWidget(btn_monitor)
+        layout.addWidget(btn_logout)
 
     def set_user(self, username):
 
@@ -188,6 +318,8 @@ class Header(QWidget):
 # ---------------- DASHBOARD SHELL ----------------
 
 class DashboardShell(QWidget):
+
+    logout_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -209,6 +341,10 @@ class DashboardShell(QWidget):
 
         self.header.page_requested.connect(
             self.change_page
+        )
+
+        self.header.logout_requested.connect(
+            self.logout_requested.emit
         )
 
     def set_user(self, user_data):
@@ -265,6 +401,10 @@ class MainApp(QMainWindow):
             self.login_complete
         )
 
+        self.dashboard.logout_requested.connect(
+            self.handle_logout
+        )
+
         # ---------------- USB MONITOR (background) ----------------
         # Runs silently: no UI, all activity logged to logs.db via db_logger.
         self._usb_stop_event = threading.Event()
@@ -278,6 +418,22 @@ class MainApp(QMainWindow):
     def closeEvent(self, event):
         self._usb_stop_event.set()
         event.accept()
+
+    def handle_logout(self):
+
+        # clear any typed credentials so they aren't left sitting in the fields
+        if hasattr(self.login_page, "username_input"):
+            self.login_page.username_input.clear()
+        if hasattr(self.login_page, "password_input"):
+            self.login_page.password_input.clear()
+
+        self.stack.setCurrentWidget(
+            self.login_page
+        )
+
+        # lock window back down to login-screen size
+        self.setMinimumSize(0, 0)
+        self.setFixedSize(500, 350)
 
     def login_complete(self, user_data):
 

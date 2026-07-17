@@ -376,7 +376,7 @@ class HomePage(QWidget):
         # Fetch card
         fetch_card = self._make_action_card(
             title="Fetch & Decrypt",
-            description="Select an encrypted .tvk file to decrypt and open.",
+            description="Select an encrypted .daps file to decrypt and open.",
             button_text="Fetch File",
             button_color=SUCCESS,
             button_hover=SUCCESS_DK,
