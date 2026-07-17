@@ -70,11 +70,11 @@ class RoleSelectionDialog(QDialog):
         self.roles = {}
 
         role_names = [
-            "Admin",
-            "Manager",
-            "HR",
-            "Finance",
-            "Developer"
+            "admin",
+            "manager",
+            "hr",
+            "finance",
+            "developer"
         ]
 
         for role in role_names:
