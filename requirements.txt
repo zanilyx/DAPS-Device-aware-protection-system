@@ -1,0 +1,50 @@
+# ============================================================
+# DAPS - Device-Aware Protection System
+# Python Dependencies
+# ============================================================
+
+# GUI Framework
+# Modern Qt6 bindings for creating cross-platform GUI applications
+PySide6==6.9.1
+
+# Cryptography
+# Core cryptography library for AES encryption/decryption
+pycryptodome==3.23.0
+
+# HTTP Client
+# Making HTTP requests to external APIs (ISS position data)
+requests==2.32.5
+
+# Astronomical Data
+# Ephemeris calculations for planetary and ISS position data
+skyfield==1.54
+
+# ============================================================
+# Development & Optional Dependencies
+# ============================================================
+
+# Database
+# SQLite3 is included with Python by default, but listed for reference
+# sqlite3  # Built-in
+
+# Utilities
+# For environment variable management (optional)
+python-dotenv==1.0.0
+
+# Testing (optional)
+# pytest==7.4.3
+# pytest-cov==4.1.0
+
+# Code Quality (optional)
+# black==23.12.0
+# flake8==6.1.0
+# pylint==3.0.3
+
+# ============================================================
+# System Requirements
+# ============================================================
+# - Python 3.8 or higher
+# - Windows 10/11 (for USB monitoring features)
+# - Administrator privileges (for USB control)
+# - 100MB+ free disk space for databases
+# ============================================================
