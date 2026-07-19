@@ -257,7 +257,90 @@ def get_file_id(filename):
 # MAIN DECRYPTION
 # ==================================================
 
+
+def decrypt_file_core(username, file_path):
+    """
+    Pure worker logic: DB lookups, device/role checks, AES decryption,
+    file I/O. No QFileDialog / QMessageBox calls in here — safe to run
+    on a background QThread so a large file doesn't freeze the GUI.
+
+    Returns (success: bool, message: str, output_path: str or None)
+    """
+
+    file_id = "UNKNOWN"
+
+    try:
+
+        filename = os.path.basename(file_path)
+
+        file_id = get_file_id(filename)
+
+        if file_id is None:
+            log_event(username, "UNKNOWN", "DECRYPT_FAILED", "Unknown File")
+            return False, "File is not registered in the database.", None
+
+        user_role = get_user_role(username)
+
+        if user_role is None:
+            log_event(username, file_id, "DECRYPT_FAILED", "Unknown User")
+            return False, "User not found.", None
+
+        if not verify_device(username):
+            log_event(username, file_id, "DEVICE_DENIED", "Unregistered Device")
+            return False, "This device is not registered.", None
+
+        if not can_access_file(file_id, user_role):
+            log_event(username, file_id, "ROLE_DENIED", user_role)
+            return False, f"{user_role} does not have permission to access this file.", None
+
+        key = get_aes_key(file_id)
+
+        if key is None:
+            log_event(username, file_id, "DECRYPT_FAILED", "AES Key Missing")
+            return False, "Encryption key not found.", None
+
+        with open(file_path, "rb") as f:
+            extension = f.read(16)
+            nonce = f.read(16)
+            tag = f.read(16)
+            ciphertext = f.read()
+
+        extension = extension.decode("utf-8").rstrip("\x00")
+
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+
+        decrypted_data = cipher.decrypt_and_verify(ciphertext, tag)
+
+        output_path = os.path.splitext(file_path)[0] + extension
+
+        with open(output_path, "wb") as f:
+            f.write(decrypted_data)
+
+        log_event(username, file_id, "DECRYPT_SUCCESS", f"Role={user_role}")
+
+        return True, f"File decrypted successfully.\n\n{output_path}", output_path
+
+    except Exception as e:
+
+        log_event(
+            username,
+            file_id,
+            "DECRYPT_FAILED",
+            str(e)
+        )
+
+        return False, str(e), None
+
+
 def decrypt_file(username, file_path=None):
+    """
+    Synchronous, dialog-driven convenience wrapper around decrypt_file_core.
+    Only safe to call from the GUI (main) thread. GUI callers that want to
+    stay responsive on large files should instead: pick the file with
+    QFileDialog on the main thread, run decrypt_file_core() on a QThread,
+    and show the result dialog from a slot connected to that thread's
+    finished signal.
+    """
 
     if not file_path:
 
@@ -273,197 +356,15 @@ def decrypt_file(username, file_path=None):
         if not file_path:
             return None
 
-    try:
+    success, message, output_path = decrypt_file_core(username, file_path)
 
-        # ------------------------------------------
-        # Get File ID
-        # ------------------------------------------
+    if success:
+        QMessageBox.information(None, "Success", message)
+    else:
+        QMessageBox.warning(None, "Decryption Failed", message)
 
-        filename = os.path.basename(file_path)
+    return output_path
 
-        file_id = get_file_id(filename)
-
-        if file_id is None:
-
-            QMessageBox.warning(
-                None,
-                "Error",
-                "File is not registered in the database."
-            )
-
-            log_event(
-                username,
-                "UNKNOWN",
-                "DECRYPT_FAILED",
-                "Unknown File"
-            )
-
-            return None
-
-        # ------------------------------------------
-        # User Role
-        # ------------------------------------------
-
-        user_role = get_user_role(username)
-
-        if user_role is None:
-
-            QMessageBox.warning(
-                None,
-                "Error",
-                "User not found."
-            )
-
-            log_event(
-                username,
-                file_id,
-                "DECRYPT_FAILED",
-                "Unknown User"
-            )
-
-            return None
-
-        # ------------------------------------------
-        # Device Verification
-        # ------------------------------------------
-
-        if not verify_device(username):
-
-            QMessageBox.warning(
-                None,
-                "Access Denied",
-                "This device is not registered."
-            )
-
-            log_event(
-                username,
-                file_id,
-                "DEVICE_DENIED",
-                "Unregistered Device"
-            )
-
-            return None
-
-        # ------------------------------------------
-        # Role Verification
-        # ------------------------------------------
-
-        if not can_access_file(file_id, user_role):
-
-            QMessageBox.warning(
-                None,
-                "Access Denied",
-                f"{user_role} does not have permission to access this file."
-            )
-
-            log_event(
-                username,
-                file_id,
-                "ROLE_DENIED",
-                user_role
-            )
-
-            return None
-
-        # ------------------------------------------
-        # AES Key
-        # ------------------------------------------
-
-        key = get_aes_key(file_id)
-
-        if key is None:
-
-            QMessageBox.warning(
-                None,
-                "Error",
-                "Encryption key not found."
-            )
-
-            log_event(
-                username,
-                file_id,
-                "DECRYPT_FAILED",
-                "AES Key Missing"
-            )
-
-            return None
-
-        # ------------------------------------------
-        # Read TVK File
-        # ------------------------------------------
-
-        with open(file_path, "rb") as f:
-
-            extension = f.read(16)
-
-            nonce = f.read(16)
-
-            tag = f.read(16)
-
-            ciphertext = f.read()
-
-        extension = extension.decode(
-            "utf-8"
-        ).rstrip("\x00")
-
-        # ------------------------------------------
-        # AES Decryption
-        # ------------------------------------------
-
-        cipher = AES.new(
-            key,
-            AES.MODE_GCM,
-            nonce=nonce
-        )
-
-        decrypted_data = cipher.decrypt_and_verify(
-            ciphertext,
-            tag
-        )
-
-        output_path = (
-            os.path.splitext(file_path)[0]
-            + extension
-        )
-
-        with open(output_path, "wb") as f:
-
-            f.write(decrypted_data)
-
-        # ------------------------------------------
-        # Audit Log
-        # ------------------------------------------
-
-        log_event(
-            username,
-            file_id,
-            "DECRYPT_SUCCESS",
-            f"Role={user_role}"
-        )
-
-        return output_path
-
-    except Exception as e:
-
-        log_event(
-            username,
-            file_id if "file_id" in locals() else "UNKNOWN",
-            "DECRYPT_FAILED",
-            str(e)
-        )
-
-        QMessageBox.critical(
-            None,
-            "Decryption Failed",
-            str(e)
-        )
-
-        return None
-
-
-# ==================================================
-# RUN
-# ==================================================
 
 if __name__ == "__main__":
 

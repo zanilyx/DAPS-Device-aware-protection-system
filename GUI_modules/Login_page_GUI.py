@@ -9,6 +9,7 @@ if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 from User_base.users.authentication import verify_user
 from User_base.users.User_data import user_details
+from Filecrypter.encryption.decrypt import verify_device
 
 
 
@@ -50,7 +51,14 @@ class LoginPage(QWidget):
         password = self.password_input.text()
 
         # Call authentication backend
-        if verify_user(username,password):
+        if verify_user(username, password):
+            if not verify_device(username):
+                # Correct credentials, wrong laptop. Deliberately shown as the
+                # same generic error as bad credentials, so a mismatched
+                # device isn't distinguishable from a wrong username/password.
+                QMessageBox.critical(self, "Error", "Invalid username or password.")
+                return
+
             self.login_success.emit(user_details(username))
         else:
             QMessageBox.critical(self, "Error", "Invalid username or password.")

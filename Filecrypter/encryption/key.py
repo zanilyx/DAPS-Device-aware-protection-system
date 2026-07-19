@@ -1,8 +1,16 @@
 import hashlib
-import requests
 from datetime import datetime
-from skyfield.api import load
 import json
+
+# NOTE: requests and skyfield are intentionally NOT imported at module
+# level. skyfield pulls in numpy/jplephem, which is a multi-second cold
+# import — doing this at the top of the file meant every app launch paid
+# that cost before the login window even appeared, since encrypt.py
+# imports this module and Home_GUI.py imports encrypt.py. Importing them
+# lazily inside the functions that actually need them means that cost
+# only happens when someone actually clicks "Upload & Encrypt", and by
+# then it's running on a background thread anyway (see _CryptoWorker in
+# Home_GUI.py), so it no longer blocks anything visible.
 
 
 # ==========================================================
@@ -10,6 +18,8 @@ import json
 # ==========================================================
 
 def get_iss_position():
+    import requests
+
     try:
         response = requests.get(
             "http://api.open-notify.org/iss-now.json",
@@ -33,6 +43,8 @@ def get_iss_position():
 # ==========================================================
 
 def get_planet_positions():
+    from skyfield.api import load
+
     planets = load("de421.bsp")
     earth = planets["earth"]
 

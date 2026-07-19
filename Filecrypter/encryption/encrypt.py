@@ -5,6 +5,8 @@ import json
 import shutil
 import sqlite3
 import base64
+
+import time
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -106,17 +108,25 @@ def get_user_details(username):
 # MOVE FILE TO COMPANY DATABASE
 # ==========================================================
 
-def move_to_company_database(file_path):
+def get_company_db_destination(file_path):
+    """Computes where a file will end up in Company DB, creating the
+    folder if needed, without actually moving anything yet."""
 
     os.makedirs(COMPANY_DB, exist_ok=True)
 
-    destination = os.path.join(
+    return os.path.join(
         COMPANY_DB,
         os.path.basename(file_path)
     )
 
+
+def move_to_company_database(file_path, destination=None):
+
+    if destination is None:
+        destination = get_company_db_destination(file_path)
+
     # If the file is already sitting at the destination (e.g. the user
-    # picked an already-encrypted .tvk file that lives in Company DB),
+    # picked an already-encrypted .daps file that lives in Company DB),
     # source and destination are the same path. Removing "destination"
     # in that case deletes the very file we're about to move, so just
     # treat it as already in place instead of moving it onto itself.
@@ -175,7 +185,130 @@ def save_file_metadata(
     conn.commit()
     conn.close()
 
+
+def encrypt_file_core(username, file_path, classification, allowed_roles):
+    """
+    Pure worker logic: key generation, AES encryption, file I/O, DB writes.
+    No QFileDialog / RoleSelectionDialog / QMessageBox calls in here —
+    this is what makes it safe to run on a background QThread instead of
+    the GUI thread, so a large file doesn't freeze the interface.
+
+    Returns (success: bool, message: str, output_path: str or None)
+    """
+
+    file_id = "UNKNOWN"
+
+    try:
+
+        department, user_role = get_user_details(username)
+
+        if department is None:
+            return False, "User not found.", None
+
+        file_id = str(uuid.uuid4())
+
+        key = generate_aes_key()
+
+        save_key(file_id, key)
+
+        filename = os.path.basename(file_path)
+
+        _, extension = os.path.splitext(filename)
+
+        extension = extension.encode("utf-8").ljust(16, b"\x00")
+
+        with open(file_path, "rb") as f:
+            original_data = f.read()
+
+        cipher = AES.new(key, AES.MODE_GCM)
+
+        ciphertext, tag = cipher.encrypt_and_digest(original_data)
+
+        encrypted_file = os.path.splitext(file_path)[0] + ".daps"
+
+        with open(encrypted_file, "wb") as f:
+            f.write(extension)
+            f.write(cipher.nonce)
+            f.write(tag)
+            f.write(ciphertext)
+
+        # Register in files.db BEFORE the physical move (see file_watchdog notes).
+        destination_path = get_company_db_destination(encrypted_file)
+
+        save_file_metadata(
+            file_id=file_id,
+            filename=os.path.basename(destination_path),
+            path=destination_path,
+            classification=classification,
+            department=department,
+            allowed_roles=allowed_roles
+        )
+
+        encrypted_file = move_to_company_database(
+            encrypted_file,
+            destination=destination_path
+        )
+
+        log_event(
+            username=username,
+            file_id=file_id,
+            action="ENCRYPT_SUCCESS",
+            details=f"Classification={classification}"
+        )
+
+        # Remove original plaintext file from device — confidential files
+        # should only exist as the encrypted .daps in Company DB.
+        original_removed = True
+        same_path = os.path.abspath(file_path) == os.path.abspath(encrypted_file)
+
+        try:
+            if not same_path and os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            original_removed = False
+            log_event(
+                username=username,
+                file_id=file_id,
+                action="ORIGINAL_DELETE_FAILED",
+                details=str(e)
+            )
+
+        if original_removed:
+            message = (
+                f"Encrypted file stored in:\n\n{encrypted_file}\n\n"
+            )
+        else:
+            message = (
+                f"Encrypted file stored in:\n\n{encrypted_file}\n\n"
+                f"Could not remove the original file from this device. "
+            )
+
+        return True, message, encrypted_file
+
+    except Exception as e:
+
+        print("Encryption Error:", e)
+
+        log_event(
+            username=username,
+            file_id=file_id,
+            action="ENCRYPT_FAILED",
+            details=str(e)
+        )
+
+        return False, str(e), None
+
+
 def encrypt_file(username, file_path=None):
+    """
+    Synchronous, dialog-driven convenience wrapper around encrypt_file_core.
+    Only safe to call from the GUI (main) thread, since it opens
+    QFileDialog / RoleSelectionDialog / QMessageBox. GUI callers that want
+    to stay responsive on large files should instead: pick the file with
+    QFileDialog on the main thread, run encrypt_file_core() on a QThread,
+    and show the result dialog from a slot connected to that thread's
+    finished signal.
+    """
 
     if not file_path:
 
@@ -190,191 +323,26 @@ def encrypt_file(username, file_path=None):
         if not file_path:
             return None
 
-    try:
+    department, user_role = get_user_details(username)
 
-        # ---------------------------------------
-        # Get User Details
-        # ---------------------------------------
-
-        department, user_role = get_user_details(username)
-
-        if department is None:
-
-            QMessageBox.warning(
-                None,
-                "Error",
-                "User not found."
-            )
-
-            return None
-
-        # ---------------------------------------
-        # Encryption Settings Dialog
-        # ---------------------------------------
-
-        dialog = RoleSelectionDialog(user_role)
-
-        if not dialog.exec():
-
-            return None
-
-        classification, allowed_roles = dialog.get_data()
-
-        # ---------------------------------------
-        # Generate File ID
-        # ---------------------------------------
-
-        file_id = str(uuid.uuid4())
-
-        # ---------------------------------------
-        # Generate AES Key
-        # ---------------------------------------
-
-        key = generate_aes_key()
-
-        save_key(file_id, key)
-
-        # ---------------------------------------
-        # Read Original File
-        # ---------------------------------------
-
-        filename = os.path.basename(file_path)
-
-        _, extension = os.path.splitext(filename)
-
-        extension = extension.encode("utf-8").ljust(16, b"\x00")
-
-        with open(file_path, "rb") as f:
-
-            original_data = f.read()
-
-        # ---------------------------------------
-        # AES-256 Encryption
-        # ---------------------------------------
-
-        cipher = AES.new(
-            key,
-            AES.MODE_GCM
-        )
-
-        ciphertext, tag = cipher.encrypt_and_digest(
-            original_data
-        )
-
-        encrypted_file = (
-            os.path.splitext(file_path)[0]
-            + ".daps"
-        )
-
-        with open(encrypted_file, "wb") as f:
-
-            f.write(extension)
-            f.write(cipher.nonce)
-            f.write(tag)
-            f.write(ciphertext)
-
-        # ---------------------------------------
-        # Move to Company Database
-        # ---------------------------------------
-
-        encrypted_file = move_to_company_database(
-            encrypted_file
-        )
-
-        # ---------------------------------------
-        # Save Metadata
-        # ---------------------------------------
-
-        save_file_metadata(
-
-            file_id=file_id,
-
-            filename=os.path.basename(
-                encrypted_file
-            ),
-
-            path=encrypted_file,
-
-            classification=classification,
-
-            department=department,
-
-            allowed_roles=allowed_roles
-
-        )
-
-        # ---------------------------------------
-        # Audit Log
-        # ---------------------------------------
-
-        log_event(
-
-            username=username,
-
-            file_id=file_id,
-
-            action="ENCRYPT_SUCCESS",
-
-            details=f"Classification={classification}"
-
-        )
-
-        # ---------------------------------------
-        # Remove original plaintext file from device
-        # ---------------------------------------
-        # The encrypted .tvk is now safely stored in Company DB and
-        # registered in the database. The confidential original must
-        # not remain on the local device — only the .tvk should exist.
-        # This runs last, after encryption/move/metadata/log all
-        # succeeded, so a failure earlier never leaves you without
-        # your original file.
-
-        original_removed = True
-
-        same_path = os.path.abspath(file_path) == os.path.abspath(encrypted_file)
-
-        try:
-            if not same_path and os.path.exists(file_path):
-                os.remove(file_path)
-        except Exception as e:
-
-            original_removed = False
-
-            print("Warning: could not remove original file:", e)
-
-            log_event(
-                username=username,
-                file_id=file_id,
-                action="ORIGINAL_DELETE_FAILED",
-                details=str(e)
-            )
-
-        return encrypted_file
-
-    except Exception as e:
-
-        print("Encryption Error:", e)
-
-        log_event(
-
-            username=username,
-
-            file_id=file_id if "file_id" in locals() else "UNKNOWN",
-
-            action="ENCRYPT_FAILED",
-
-            details=str(e)
-
-        )
-
-        QMessageBox.critical(
-
-            None,
-
-            "Encryption Failed",
-
-            str(e)
-
-        )
-
+    if department is None:
+        QMessageBox.warning(None, "Error", "User not found.")
         return None
+
+    dialog = RoleSelectionDialog(user_role)
+
+    if not dialog.exec():
+        return None
+
+    classification, allowed_roles = dialog.get_data()
+
+    success, message, output_path = encrypt_file_core(
+        username, file_path, classification, allowed_roles
+    )
+
+    if success:
+        QMessageBox.information(None, "Encryption Successful", message)
+    else:
+        QMessageBox.critical(None, "Encryption Failed", message)
+
+    return output_path
