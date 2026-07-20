@@ -2,7 +2,6 @@
 webapp.py
 
 Flask-based web dashboard for the network monitor.
-Now with authentication for admins and managers only.
 """
 
 from flask import Flask, jsonify, render_template_string, request, session, redirect
@@ -25,7 +24,6 @@ from core.alerts import (
     clear_alerts,
 )
 from utils.config import SETTINGS
-from database.users import authenticate, get_user
 
 app = Flask(__name__)
 # Use a more secure secret key
@@ -35,75 +33,6 @@ app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using HTTPS
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 
 MB = 1024 * 1024
-
-
-# =====================================================
-# Authentication Middleware
-# =====================================================
-
-def login_required(f):
-    """Decorator to require authentication."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'username' not in session:
-            return redirect('/login')
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-def admin_or_manager_required(f):
-    """Decorator to require admin or manager role."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'username' not in session:
-            return jsonify({"error": "Unauthorized"}), 401
-        
-        user = get_user(session['username'])
-        if not user or user['role'] not in ('admin', 'manager'):
-            return jsonify({"error": "Unauthorized"}), 403
-        
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-# =====================================================
-# Authentication Routes
-# =====================================================
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    """Login page and handler."""
-    if request.method == 'GET':
-        # Show login form
-        return render_template_string(LOGIN_PAGE)
-    
-    # Handle POST request
-    username = request.form.get('username', '').strip()
-    password = request.form.get('password', '').strip()
-    
-    if not username or not password:
-        return render_template_string(LOGIN_PAGE, error="Username and password required"), 400
-    
-    print(f"[LOGIN] Attempting login for: {username}")
-    is_auth, role = authenticate(username, password)
-    print(f"[LOGIN] Auth result: is_auth={is_auth}, role={role}")
-    
-    if is_auth and role in ('admin', 'manager'):
-        session.permanent = True
-        session['username'] = username
-        session['role'] = role
-        print(f"[LOGIN] Login successful for {username}")
-        return redirect('/')
-    
-    print(f"[LOGIN] Login failed for {username}")
-    return render_template_string(LOGIN_PAGE, error="Invalid credentials or insufficient permissions"), 401
-
-
-@app.route('/logout', methods=['GET', 'POST'])
-def logout():
-    """Logout handler."""
-    session.clear()
-    return redirect('/login')
 
 
 # =====================================================
@@ -164,11 +93,10 @@ def grouped_flows(limit=100):
 
 
 # =====================================================
-# JSON API (Protected)
+# JSON API
 # =====================================================
 
 @app.route("/api/summary")
-@admin_or_manager_required
 def api_summary():
     session_obj = get_session()
 
@@ -220,7 +148,6 @@ def api_summary():
 
 
 @app.route("/api/flows")
-@admin_or_manager_required
 def api_flows():
     rows = grouped_flows(100)
 
@@ -232,13 +159,11 @@ def api_flows():
 
 
 @app.route("/api/alerts")
-@admin_or_manager_required
 def api_alerts():
     return jsonify(get_alerts())
 
 
 @app.route("/api/alerts/clear", methods=["POST"])
-@admin_or_manager_required
 def api_clear_alerts():
     clear_alerts()
     return jsonify({"ok": True})
@@ -247,137 +172,6 @@ def api_clear_alerts():
 # =====================================================
 # HTML Pages
 # =====================================================
-
-LOGIN_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>Network Monitor - Login</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            background: #0d1117;
-            color: #c9d1d9;
-            font-family: "Segoe UI", Consolas, monospace;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .login-container {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 40px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        }
-        h1 {
-            color: #58a6ff;
-            font-size: 24px;
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            font-size: 13px;
-            color: #8b949e;
-            text-transform: uppercase;
-            margin-bottom: 8px;
-        }
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 10px 12px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            color: #c9d1d9;
-            font-family: inherit;
-            font-size: 14px;
-            transition: border-color 0.2s;
-        }
-        input[type="text"]:focus,
-        input[type="password"]:focus {
-            outline: none;
-            border-color: #58a6ff;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            background: #238636;
-            border: 1px solid #2ea043;
-            border-radius: 6px;
-            color: #fff;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        button:hover {
-            background: #2ea043;
-        }
-        button:active {
-            background: #238636;
-        }
-        .error {
-            background: #2a0000;
-            border: 1px solid #f85149;
-            border-radius: 6px;
-            padding: 12px;
-            color: #f85149;
-            font-size: 13px;
-            margin-bottom: 20px;
-        }
-        .info {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 12px;
-            color: #8b949e;
-            font-size: 12px;
-            margin-top: 20px;
-            line-height: 1.5;
-        }
-    </style>
-</head>
-<body>
-    <div class="login-container">
-        <h1>NETWORK MONITOR</h1>
-        
-        {% if error %}
-        <div class="error">{{ error }}</div>
-        {% endif %}
-        
-        <form method="POST">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autofocus>
-            </div>
-            
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            
-            <button type="submit">Sign In</button>
-        </form>
-        
-        <div class="info">
-            <strong>Note:</strong> Only admins and managers can access this network monitor.
-            Please contact your administrator if you don't have credentials.
-        </div>
-    </div>
-</body>
-</html>
-"""
 
 PAGE = """
 <!DOCTYPE html>
@@ -416,27 +210,6 @@ PAGE = """
             display: flex;
             gap: 16px;
             align-items: center;
-        }
-
-        .user-info {
-            font-size: 13px;
-            color: #8b949e;
-        }
-
-        .btn-logout {
-            background: #21262d;
-            border: 1px solid #30363d;
-            color: #c9d1d9;
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-logout:hover {
-            border-color: #f85149;
-            color: #f85149;
         }
 
         h1 {
@@ -648,12 +421,6 @@ PAGE = """
 <body>
     <div class="navbar">
         <h1>NETWORK TRAFFIC MONITOR</h1>
-        <div class="navbar-right">
-            <div class="user-info" id="user-display"></div>
-            <form method="POST" action="/logout" style="margin: 0;">
-                <button type="submit" class="btn-logout">Logout</button>
-            </form>
-        </div>
     </div>
 
     <!-- Summary cards -->
@@ -864,11 +631,6 @@ PAGE = """
                     fetch("/api/alerts"),
                 ]);
 
-                if (summaryRes.status === 401 || flowsRes.status === 401) {
-                    window.location.href = "/login";
-                    return;
-                }
-
                 const summary = await summaryRes.json();
                 buildSummary(summary);
                 buildDaily(summary.daily);
@@ -892,7 +654,6 @@ PAGE = """
 
 
 @app.route("/")
-@login_required
 def index():
     return render_template_string(PAGE)
 
